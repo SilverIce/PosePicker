@@ -48,6 +48,9 @@ function PoseList_removePose(int list, Idle pose) global
 	int idx = PoseList_findPose(list, pose)
 	if idx != -1
 		JArray.eraseIndex(PoseList_getList(list), idx)
+		if idx < PoseList_poseIndex(list)
+			PoseList_setPoseIndex(list, PoseList_poseIndex(list) - 1)
+		endif
 	endif
 endfunction
 
