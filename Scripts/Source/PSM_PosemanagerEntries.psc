@@ -13,6 +13,7 @@ endfunction
 int function PoseList_make(string name) global
 	int list = object()
 	setStr(list, "name", name)
+	setInt(list, "poseIdx", 0)
 	setObj(list, "poses", JArray.object())
 	return list
 endfunction
@@ -21,13 +22,16 @@ string function PoseList_getName(int list) global
 endfunction
 string function PoseList_describe(int list) global
 	if list
-		return PoseList_getName(list)+" "+JValue.count(PoseList_getList(list))+" poses"
+		return PoseList_getName(list)+", "+JValue.count(PoseList_getList(list))+" poses"
 	else
 		return "'pose collection doesn't exist'"
 	endif
 endfunction
 int function PoseList_getList(int list) global
 	return getObj(list, "poses")
+endfunction
+int function PoseList_poseCount(int list) global
+	return JValue.count(PoseList_getList(list))
 endfunction
 int function PoseList_findPose(int list, Idle pose) global
 	return JArray.findForm(PoseList_getList(list), pose)
@@ -47,6 +51,18 @@ function PoseList_removePose(int list, Idle pose) global
 	endif
 endfunction
 
+int function PoseList_poseIndex(int list) global
+	return getInt(list, "poseIdx")
+endfunction
+int function PoseList_setPoseIndex(int list, int index) global
+	int count = JValue.count(PoseList_getList(list))
+	int idx = (index + count) % count
+	setInt(list, "poseIdx", idx)
+	return idx
+endfunction
+Idle function PoseList_currentPose(int list) global
+	return JArray.getForm(PoseList_getList(list), PoseList_poseIndex(list)) as Idle
+endfunction
 
 ; Globals
 

@@ -2,29 +2,11 @@
   "dummyCreateCollection": {
     "name": "Create Pose Collection"
   },
-  "keyCode2Handler": {
-    "60": "KEY_F2",
-    "61": "KEY_F3",
-    "__metaInfo": {
-      "typeName": "JIntMap"
-    },
-    "205": "KEY_RIGHT_ARROW",
-    "45": "KEY_X",
-    "203": "KEY_LEFT_ARROW",
-    "22": "KEY_U",
-    "25": "KEY_P",
-    "34": "KEY_G",
-    "30": "KEY_A",
-    "38": "KEY_L"
-  },
   "poseLists": [
     "__reference|.dummyCreateCollection",
     {
-      "name": "SkyrimPoses",
-      "poses": []
-    },
-    {
       "name": "Halo's Poses",
+      "poseIdx": 3,
       "poses": [
         "__formData|Halo's Poser.esp|0x12183b",
         "__formData|Halo's Poser.esp|0x12183d",
@@ -51,8 +33,52 @@
     {
       "name": "Halo horizontal poses",
       "poses": [
-        "__formData|Halo's Poser.esp|0x121a60"
+        "__formData|Halo's Poser.esp|0x121a60",
+        "__formData|Halo's Poser.esp|0x121a7f",
+        "__formData|Halo's Poser.esp|0x121a83",
+        "__formData|Halo's Poser.esp|0x121a86"
+      ]
+    },
+    {
+      "name": "Halo's standing screen-archery",
+      "poseIdx": 0,
+      "poses": [
+        "__formData|Halo's Poser.esp|0x121926",
+        "__formData|Halo's Poser.esp|0x121a05",
+        "__formData|Halo's Poser.esp|0x121a09",
+        "__formData|Halo's Poser.esp|0x121a0c",
+        "__formData|Halo's Poser.esp|0x121ac0",
+        "__formData|Halo's Poser.esp|0x121ac2",
+        "__formData|Halo's Poser.esp|0x121acb",
+        "__formData|Halo's Poser.esp|0x121ade",
+        "__formData|Halo's Poser.esp|0x121b3a",
+        "__formData|Halo's Poser.esp|0x121b3b",
+        "__formData|Halo's Poser.esp|0x121b3d",
+        "__formData|Halo's Poser.esp|0x121b40",
+        "__formData|Halo's Poser.esp|0x122767",
+        "__formData|Halo's Poser.esp|0x122758",
+        "__formData|Halo's Poser.esp|0x12274f",
+        "__formData|Halo's Poser.esp|0x122734",
+        "__formData|Halo's Poser.esp|0x122732",
+        "__formData|Halo's Poser.esp|0x122730",
+        "__formData|Halo's Poser.esp|0x12272e",
+        "__formData|Halo's Poser.esp|0x12271d"
       ]
     }
-  ]
+  ],
+  "keyCode2Handler": {
+    "205": "KEY_RIGHT_ARROW",
+    "__metaInfo": {
+      "typeName": "JIntMap"
+    },
+    "34": "KEY_G",
+    "22": "KEY_U",
+    "60": "KEY_F2",
+    "38": "KEY_L",
+    "25": "KEY_P",
+    "30": "KEY_A",
+    "45": "KEY_X",
+    "61": "KEY_F3",
+    "203": "KEY_LEFT_ARROW"
+  }
 }

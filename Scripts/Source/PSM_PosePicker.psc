@@ -27,14 +27,11 @@ function listenKeys()
 	int handlers = PSM_PosemanagerEntries.keyCode2Handler()
 	PrintConsole("PSM_PosemanagerEntries.keyCode2Handler: "+ handlers+" count "+JValue.count(handlers))
 
-	int keyCodes = JIntMap.allKeys(handlers)
-	;PrintConsole("JIntMap.nextKey(handlers): "+ keyCode)
-	while JValue.count(keyCodes) > 0
-		int keyCode = JArray.getInt(keyCodes, -1)
-		JArray.eraseIndex(keyCodes, -1)
-		RegisterForKey(keyCode)
-		PrintConsole("RegisterForKey: "+ keyCode+":"+ JIntMap.getStr(handlers, keyCode))
-		;keyCode = JIntMap.nextKey(handlers, keyCode)
+	int k = JIntMap.getNthKey(handlers, 0)
+	while k
+		RegisterForKey(k)
+		PrintConsole("RegisterForKey: "+ k+":"+ JIntMap.getStr(handlers, k))
+		k = JIntMap.nextKey(handlers, k)
 	endwhile
 
 	; _idles = FormReflection.queryFormsFrom("Halo's Poser.esp", withFormType = 78)
@@ -50,39 +47,52 @@ Event OnKeyDown(int keyCode)
 	endif
 
 	string handlerState = JIntMap.getStr(PSM_PosemanagerEntries.keyCode2Handler(), keyCode)
-
-	PrintConsole("OnKeyDown: "+keyCode+":"+handlerState)
-
-	if keyCode == KEY_F3
-		handlerState = "KEY_F3"
-	endif
+	;PrintConsole("OnKeyDown: "+keyCode+":"+handlerState)
 
 	GoToState(handlerState)
 	handleKey(keyCode)
 	GoToState("")
+EndEvent
 
+Event OnKeyUp(int keyCode, float holdTime)
+	if !Input.IsKeyPressed(KEY_LEFT_ALT)
+		return
+	endif
+
+	string handlerState = JIntMap.getStr(PSM_PosemanagerEntries.keyCode2Handler(), keyCode)
+	
+	GoToState(handlerState)
+	handleKeyUp(keyCode, holdTime)
+	GoToState("")
 EndEvent
 
 function handleKey(int keyCode)
 	Notification("Unhandled key " + keyCode)
 endfunction
+function handleKeyUp(int keyCode, float holdTime)
+endfunction
+
+Float Property CHoldTime = 2.0 AutoReadonly
+Float Property CIterationRate = 20.0 AutoReadonly
 
 State KEY_RIGHT_ARROW
 	function handleKey(int keyCode)
-		;Idle anim = self.currentPose
 		self.currentPoseIdx += 1
-		;if anim
-		;	Game.GetPlayer().PlayIdle(anim)
-		;endif
+	endfunction
+	function handleKeyUp(int keyCode, float holdTime)
+		if holdTime > HoldTime
+			self.currentPoseIdx += (PoseList_poseCount(self.jSourcePoseArray) / CIterationRate * (holdTime - CHoldTime)) as Int
+		endif
 	endfunction
 EndState
 State KEY_LEFT_ARROW
 	function handleKey(int keyCode)
-		;Idle anim = self.currentPose
 		self.currentPoseIdx -= 1
-		;if anim
-		;	Game.GetPlayer().PlayIdle(anim)
-		;endif
+	endfunction
+	function handleKeyUp(int keyCode, float holdTime)
+		if holdTime > CHoldTime
+			self.currentPoseIdx -= (PoseList_poseCount(self.jSourcePoseArray) / CIterationRate * (holdTime - CHoldTime)) as Int
+		endif
 	endfunction
 EndState
 ; Pick & View poses from collection
@@ -93,7 +103,7 @@ State KEY_P
 			return
 		endif
 
-		self.viewPoseList(sourcePoseArray = PoseList_getList(jPoses))
+		self.viewPoseList(jPoses)
 	endfunction
 EndState
 ; Activate pose list
@@ -111,7 +121,7 @@ State KEY_L
 	function handleKey(int keyCode)
 
 		String[] modList = PSM_PosemanagerEntries.getModList()
-		int selectedIdx = ((self as Form) as UILIB_1).ShowList("Pick a plugin", asOptions = modList, aiStartIndex = 0, aiDefaultIndex = 0)
+		int selectedIdx = ((self as Form) as UILIB_1).ShowList("Pick a plugin", asOptions = modList, aiStartIndex = -1, aiDefaultIndex = -1)
 		if selectedIdx == -1
 			return
 		endif
@@ -131,17 +141,17 @@ State KEY_L
 
 		Notification("Press Alt-F to add pose into current active pose collection")
 
-		int jsourcePoses = JArray_insertFormArray(JArray.object(), poses)
+		int jPoses = PoseList_make(name = (modName + "-based list"))
+		JArray_insertFormArray(PoseList_getList(jPoses), poses)
+		PSM_PosemanagerEntries.addPoseCollection(jPoses)
 
-		self.viewPoseList(sourcePoseArray = jsourcePoses)
-		; select active pose list
+		self.viewPoseList(jPoses)
 
 	endfunction
 EndState
 
 function viewPoseList(int sourcePoseArray)
 	self.jSourcePoseArray = sourcePoseArray
-	self.currentPoseIdx = 0
 endfunction
 
 ;;;;;;;;;;;;;;;;;;;;;
@@ -149,22 +159,18 @@ endfunction
 
 Int Property currentPoseIdx
 	int function get()
-		return _currentPoseIdx % JValue.count(self.jSourcePoseArray)
+		return PoseList_poseIndex(self.jSourcePoseArray)
 	endfunction
-	function set(int o)
-		_currentPoseIdx = (o + JValue.count(self.jSourcePoseArray)) % JValue.count(self.jSourcePoseArray)
+	function set(int index)
+		int idx = PoseList_setPoseIndex(self.jSourcePoseArray, index)
 
-		Idle pose = JArray.getForm(self.jSourcePoseArray, _currentPoseIdx) as Idle
+		string text = idx + "/" + PoseList_poseCount(self.jSourcePoseArray) + " of " + PoseList_getName(self.jSourcePoseArray)
+		PrintConsole(text)
+
+		Idle pose = PoseList_currentPose(self.jSourcePoseArray)
 		if pose
 			Game.GetPlayer().PlayIdle(pose)
 		endif
-	endfunction
-endproperty
-int _currentPoseIdx = 0
-
-Idle Property currentPose
-	Idle function get()
-		return JArray.getForm(self.jSourcePoseArray, self.currentPoseIdx) as Idle
 	endfunction
 endproperty
 
@@ -174,7 +180,7 @@ Int Property jActivePoses
 	endfunction
 	function set(int o)
 		_jActivePoses = JValue.releaseAndRetain(_jActivePoses, o)
-		Notification("Current active pose collection: " + PoseList_describe(o))
+		Notification("Editing pose collection: " + PoseList_describe(o))
 	endfunction
 endproperty
 int _jActivePoses = 0
@@ -182,7 +188,7 @@ int _jActivePoses = 0
 Int Property jActivePosesOrPickOne
 	int function get()
 		if !self.jActivePoses
-			self.jActivePoses = self.pickPoseList(suggestedListName = "Active Pose Collection")
+			self.jActivePoses = self.pickPoseList(headerText = "Pick any pose list to edit it", suggestedListName = "A new list to edit")
 		endif
 		return self.jActivePoses
 	endfunction
@@ -194,41 +200,39 @@ Int Property jSourcePoseArray
 	endfunction
 	function set(int o)
 		_jSourcePoseArray = JValue.releaseAndRetain(_jSourcePoseArray, o)
+		Notification("Viewing pose collection: " + PoseList_describe(o))
 	endfunction
 endproperty
 int _jSourcePoseArray = 0
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-int function createPoseCollection(string title, string suggestedCollectionName)
+int function createPoseCollection(string title, string suggestedCollectionName = "Collection Name")
 	string listName = ((self as Form) as UILIB_1).ShowTextInput(title, suggestedCollectionName)
+
+	if !listName
+		Notification("No collections created")
+		return 0
+	endif
 	
 	int jPoses = PoseList_make(listName)
 	PSM_PosemanagerEntries.addPoseCollection(jPoses)
 	return jPoses
 endfunction
 
-int function pickPoseList(string headerText = "Pick a pose list", string suggestedListName)
-
-	; if JValue.count(PSM_PosemanagerEntries.getPoseLists()) == 0
-	; 	return createPoseCollection(title = "At least one pose list must be created", suggestedCollectionName = suggestedListName)
-	; endif
+int function pickPoseList(string headerText, string suggestedListName)
 
 	string[] poseListsNames = PSM_PosemanagerEntries.getPoseListsNames()
-	int iCurrPoseIdx = poseListsNames.Find(PoseList_getName(self.jActivePoses))
+	;int iCurrPoseIdx = poseListsNames.Find(PoseList_getName(self.jActivePoses))
 
-	if iCurrPoseIdx == -1
-		iCurrPoseIdx = 0
-	endif
-
-	int selectedIdx = ((self as Form) as UILIB_1).ShowList(headerText, asOptions = poseListsNames, aiStartIndex = iCurrPoseIdx, aiDefaultIndex = iCurrPoseIdx)
+	int selectedIdx = ((self as Form) as UILIB_1).ShowList(headerText, asOptions = poseListsNames, aiStartIndex = -1, aiDefaultIndex = -1)
 	if selectedIdx == -1
 		return 0
 	endif
 
 	int jPoses = PSM_PosemanagerEntries.getNthPoseList(selectedIdx)
 	if jPoses == PSM_PosemanagerEntries.dummyPoseCollection()
-		jPoses = self.createPoseCollection("Crete Pose Collection", "Rename me")
+		jPoses = self.createPoseCollection(title = "Create new pose collection", suggestedCollectionName = "New Collection")
 	endif
 
 	return jPoses
@@ -237,7 +241,7 @@ endfunction
 State KEY_F2
 	function handleKey(int keyCode)
 		PSM_PosemanagerEntries.dumpRoot()
-		Notification("dumped collections into the file")
+		Notification("saved collections into the file")
 	endfunction
 EndState
 State KEY_F3
@@ -255,7 +259,7 @@ State KEY_A
 		aactions[1] = "Delete"
 		aactions[2] = "Rename"
 
-		int selectedIdx = ((self as Form) as UILIB_1).ShowList("Perform action on active pose", asOptions = aactions, aiStartIndex = 0, aiDefaultIndex = 0)
+		int selectedIdx = ((self as Form) as UILIB_1).ShowList("Perform action on " + PoseList_describe(self.jActivePoses), asOptions = aactions, aiStartIndex = -1, aiDefaultIndex = -1)
 		if selectedIdx == -1
 			return
 		endif
@@ -273,18 +277,14 @@ EndState
 
 State KEY_G
 	function handleKey(int keyCode)
-		Idle pose = self.currentPose
-		if pose
-			PoseList_addPose(self.jActivePosesOrPickOne, pose)
-		endif
+		Idle pose = PoseList_currentPose(self.jSourcePoseArray)
+		PoseList_addPose(self.jActivePosesOrPickOne, pose)
 	endfunction
 EndState
 State KEY_U
 	function handleKey(int keyCode)
-		Idle pose = self.currentPose
-		if pose
-			PoseList_removePose(self.jActivePosesOrPickOne, pose)
-		endif
+		Idle pose = PoseList_currentPose(self.jSourcePoseArray)
+		PoseList_removePose(self.jActivePosesOrPickOne, pose)
 	endfunction
 EndState
 
