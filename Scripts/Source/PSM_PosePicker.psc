@@ -13,7 +13,7 @@ EndEvent
 ; EndEvent
 
 function init()
-	Notification("PSM_PosePicker init")
+	PrintConsole("PSM_PosePicker init")
 
 	listenKeys()
 
@@ -47,11 +47,11 @@ Event OnKeyDown(int keyCode)
 	endif
 
 	string handlerState = JIntMap.getStr(PSM_PosemanagerEntries.keyCode2Handler(), keyCode)
-	;PrintConsole("OnKeyDown: "+keyCode+":"+handlerState)
+	PrintConsole("OnKeyDown: "+keyCode+":"+handlerState)
 
-	GoToState(handlerState)
-	handleKey(keyCode)
-	GoToState("")
+	self.GoToState(handlerState)
+	self.handleKey(keyCode)
+	self.GoToState("")
 EndEvent
 
 Event OnKeyUp(int keyCode, float holdTime)
@@ -61,9 +61,9 @@ Event OnKeyUp(int keyCode, float holdTime)
 
 	string handlerState = JIntMap.getStr(PSM_PosemanagerEntries.keyCode2Handler(), keyCode)
 	
-	GoToState(handlerState)
-	handleKeyUp(keyCode, holdTime)
-	GoToState("")
+	self.GoToState(handlerState)
+	self.handleKeyUp(keyCode, holdTime)
+	self.GoToState("")
 EndEvent
 
 function handleKey(int keyCode)
@@ -72,8 +72,14 @@ endfunction
 function handleKeyUp(int keyCode, float holdTime)
 endfunction
 
-Float Property CHoldTime = 2.0 AutoReadonly
-Float Property CIterationRate = 20.0 AutoReadonly
+; Min. hold time to activate fast iteration
+Float Property CHoldTime = 2.0 autoreadonly
+; Skip N poses per second
+Float Property CIterationRate = 20.0 autoreadonly
+
+int function calculateAmountOfPosesToSkip(float buttonHoldTime)
+	return ((buttonHoldTime - CHoldTime) / CIterationRate) as Int
+endfunction
 
 State KEY_RIGHT_ARROW
 	function handleKey(int keyCode)
@@ -81,7 +87,7 @@ State KEY_RIGHT_ARROW
 	endfunction
 	function handleKeyUp(int keyCode, float holdTime)
 		if holdTime > HoldTime
-			self.currentPoseIdx += (PoseList_poseCount(self.jSourcePoseArray) / CIterationRate * (holdTime - CHoldTime)) as Int
+			self.currentPoseIdx += self.calculateAmountOfPosesToSkip(buttonHoldTime = holdTime)
 		endif
 	endfunction
 EndState
@@ -91,14 +97,17 @@ State KEY_LEFT_ARROW
 	endfunction
 	function handleKeyUp(int keyCode, float holdTime)
 		if holdTime > CHoldTime
-			self.currentPoseIdx -= (PoseList_poseCount(self.jSourcePoseArray) / CIterationRate * (holdTime - CHoldTime)) as Int
+			self.currentPoseIdx -= self.calculateAmountOfPosesToSkip(buttonHoldTime = holdTime)
 		endif
 	endfunction
 EndState
 ; Pick & View poses from collection
 State KEY_P
 	function handleKey(int keyCode)
-		int jPoses = self.pickPoseList(headerText = "Pick a pose list to view it", suggestedListName = "Rename me")
+		int jPoses = self.pickPoseList(headerText = "Pick a pose list to view it"\
+			, suggestedListName = "Rename me"\
+			, jCurrentSelectedCollection = self.jSourcePoseArray)
+
 		if !jPoses
 			return
 		endif
@@ -109,7 +118,10 @@ EndState
 ; Activate pose list
 State KEY_X
 	function handleKey(int keyCode)
-		int jPoses = self.pickPoseList(headerText = "Pick a pose list to edit it", suggestedListName = "Rename me")
+		int jPoses = self.pickPoseList(headerText = "Pick a pose list to edit it"\
+			, suggestedListName = "Rename me"\
+			, jCurrentSelectedCollection = self.jActivePoses)
+
 		if !jPoses
 			return
 		endif
@@ -121,7 +133,7 @@ State KEY_L
 	function handleKey(int keyCode)
 
 		String[] modList = PSM_PosemanagerEntries.getModList()
-		int selectedIdx = ((self as Form) as UILIB_1).ShowList("Pick a plugin", asOptions = modList, aiStartIndex = -1, aiDefaultIndex = -1)
+		int selectedIdx = self.uilib.ShowList("Pick a plugin", asOptions = modList, aiStartIndex = -1, aiDefaultIndex = -1)
 		if selectedIdx == -1
 			return
 		endif
@@ -139,7 +151,7 @@ State KEY_L
 			return
 		endif
 
-		Notification("Press Alt-F to add pose into current active pose collection")
+		Notification("Press Alt-F to add a pose into current active pose collection")
 
 		int jPoses = PoseList_make(name = (modName + "-based list"))
 		JArray_insertFormArray(PoseList_getList(jPoses), poses)
@@ -156,6 +168,11 @@ endfunction
 
 ;;;;;;;;;;;;;;;;;;;;;
 
+UILIB_1 Property uilib
+	UILIB_1 function get()
+		return (self as Form) as UILIB_1
+	endfunction
+endproperty
 
 Int Property currentPoseIdx
 	int function get()
@@ -208,7 +225,7 @@ int _jSourcePoseArray = 0
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 int function createPoseCollection(string title, string suggestedCollectionName = "Collection Name")
-	string listName = ((self as Form) as UILIB_1).ShowTextInput(title, suggestedCollectionName)
+	string listName = self.uilib.ShowTextInput(title, suggestedCollectionName)
 
 	if !listName
 		Notification("No collections created")
@@ -220,12 +237,13 @@ int function createPoseCollection(string title, string suggestedCollectionName =
 	return jPoses
 endfunction
 
-int function pickPoseList(string headerText, string suggestedListName)
+int function pickPoseList(string headerText, string suggestedListName, int jCurrentSelectedCollection = 0)
 
 	string[] poseListsNames = PSM_PosemanagerEntries.getPoseListsNames()
-	;int iCurrPoseIdx = poseListsNames.Find(PoseList_getName(self.jActivePoses))
 
-	int selectedIdx = ((self as Form) as UILIB_1).ShowList(headerText, asOptions = poseListsNames, aiStartIndex = -1, aiDefaultIndex = -1)
+	int iCurrPoseIdx = JArray.findObj(PSM_PosemanagerEntries.getPoseLists(), jCurrentSelectedCollection)
+
+	int selectedIdx = uilib.ShowList(headerText, asOptions = poseListsNames, aiStartIndex = iCurrPoseIdx, aiDefaultIndex = -1)
 	if selectedIdx == -1
 		return 0
 	endif
@@ -259,7 +277,7 @@ State KEY_A
 		aactions[1] = "Delete"
 		aactions[2] = "Rename"
 
-		int selectedIdx = ((self as Form) as UILIB_1).ShowList("Perform action on " + PoseList_describe(self.jActivePoses), asOptions = aactions, aiStartIndex = -1, aiDefaultIndex = -1)
+		int selectedIdx = self.uilib.ShowList("Perform action on " + PoseList_describe(self.jActivePoses), asOptions = aactions, aiStartIndex = -1, aiDefaultIndex = -1)
 		if selectedIdx == -1
 			return
 		endif
