@@ -4,27 +4,121 @@ import Debug
 import PSM_PosemanagerEntries
 import MiscUtil
 
-Event OnInit()
-	init()
-EndEvent
+; Bool Property isActive
+; 	Bool function get()
+; 		return getState() != "Sleep"
+; 	endfunction
+; 	function set(Bool o)
+; 		if o
+; 			GoToState("")
+; 		else
+; 			GoToState("Sleep")
+; 		endif
+; 	endfunction
+; endproperty
 
-; Event OnPlayerLoadGame()
-; 	init()
+; Auto State Sleep
+; 	Event OnBeginState()
+; 		self.jKeyConf = 0
+; 		self.jContext = 0
+; 	EndEvent
+; EndState
+
+; Event OnBeginState()
+; 	self.jKeyConf = KHConf_singleton()
+; 	self.jContext = CTX_singleton()
 ; EndEvent
 
-function init()
-	PrintConsole("PSM_PosePicker init")
 
-	listenKeys()
+;;;;;;;;;;;;;;;;; AutoSyncing
 
-	PrintConsole("init finit")
+Event OnUpdate()
+	self.syncData()
+	_isSyncDelayed = False
+EndEvent
+
+function syncData()
+	self.jKeyConf = KHConf_singleton(self.jKeyConf)
+	self.jContext = CTX_singleton(self.jContext)
+	PrintConsole("Syncing data")
 endfunction
+
+bool _isSyncDelayed = False
+
+function trySyncDataAfterDelay(float delay = 5.0)
+	if _isSyncDelayed == False
+		self.RegisterForSingleUpdate(delay)
+	endif
+endfunction
+
+;;;;;;;;;;;;;; Key Handling ;;;;
+
+Int Property jKeyConf
+	int function get()
+		return _jKeyConf
+	endfunction
+	function set(int o)
+		if o == _jKeyConf
+			return
+		endif
+		_jKeyConf = JValue.releaseAndRetain(_jKeyConf, o)
+
+		if o != 0
+			self.listenKeys()
+			self.RegisterForModEvent("KHConf_setKeyCodeForHandler", "OnKeyConfigKeyChange")
+		else
+			self.UnregisterForModEvent("KHConf_setKeyCodeForHandler")
+			self.UnregisterForAllKeys()
+		endif
+	endfunction
+endproperty
+int _jKeyConf = 0
+
+Event OnKeyConfigKeyChange(int jConfig, int oldKeyCode, int keyCode)
+	self.UnregisterForKey(oldKeyCode)
+	self.RegisterForKey(keyCode)
+EndEvent
+
+Event OnKeyDown(int keyCode)
+	if !Input.IsKeyPressed(KHConf_getAltKeyCode(jKeyConf))
+		return
+	endif
+
+	string handlerState = KHConf_getKeyHandler(jKeyConf, keyCode)
+	PrintConsole("OnKeyDown: "+keyCode+":"+handlerState)
+	if handlerState
+		string prevState = self.GetState()
+		self.GoToState(handlerState)
+		self.handleKey(0)
+		self.GoToState(prevState)
+
+		JSONFile_onChanged(self.jContext)
+		self.trySyncDataAfterDelay()
+	endif
+EndEvent
+
+Event OnKeyUp(int keyCode, float holdTime)
+	if !Input.IsKeyPressed(KHConf_getAltKeyCode(jKeyConf))
+		return
+	endif
+
+	string handlerState = KHConf_getKeyHandler(jKeyConf, keyCode)
+	if handlerState
+		string prevState = self.GetState()
+		self.GoToState(handlerState)
+		self.handleKeyUp(0, holdTime)
+		self.GoToState(prevState)
+
+		JSONFile_onChanged(self.jContext)
+		self.trySyncDataAfterDelay()
+	endif
+EndEvent
 
 function listenKeys()
 	PrintConsole("listenKeys begin")
 	UnregisterForAllKeys()
 
-	int handlers = PSM_PosemanagerEntries.keyCode2Handler()
+	int handlers = KHConf_getKeyHandlers(jKeyConf)
 	PrintConsole("PSM_PosemanagerEntries.keyCode2Handler: "+ handlers+" count "+JValue.count(handlers))
 
 	int k = JIntMap.getNthKey(handlers, 0)
@@ -34,37 +128,8 @@ function listenKeys()
 		k = JIntMap.nextKey(handlers, k)
 	endwhile
 
-	; _idles = FormReflection.queryFormsFrom("Halo's Poser.esp", withFormType = 78)
-	; _currentIdx = 0
-	; Notification(_idles.Length + " Halo's anims found")
 	PrintConsole("listenKeys end")
-endfunction
-
-Event OnKeyDown(int keyCode)
-
-	if !Input.IsKeyPressed(KEY_LEFT_ALT)
-		return
-	endif
-
-	string handlerState = JIntMap.getStr(PSM_PosemanagerEntries.keyCode2Handler(), keyCode)
-	PrintConsole("OnKeyDown: "+keyCode+":"+handlerState)
-
-	self.GoToState(handlerState)
-	self.handleKey(keyCode)
-	self.GoToState("")
-EndEvent
-
-Event OnKeyUp(int keyCode, float holdTime)
-	if !Input.IsKeyPressed(KEY_LEFT_ALT)
-		return
-	endif
-
-	string handlerState = JIntMap.getStr(PSM_PosemanagerEntries.keyCode2Handler(), keyCode)
-	
-	self.GoToState(handlerState)
-	self.handleKeyUp(keyCode, holdTime)
-	self.GoToState("")
-EndEvent
+endfunction 
 
 function handleKey(int keyCode)
 	Notification("Unhandled key " + keyCode)
@@ -72,16 +137,18 @@ endfunction
 function handleKeyUp(int keyCode, float holdTime)
 endfunction
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 ; Min. hold time to activate fast iteration
 Float Property CHoldTime = 2.0 autoreadonly
 ; Skip N poses per second
 Float Property CIterationRate = 20.0 autoreadonly
 
 int function calculateAmountOfPosesToSkip(float buttonHoldTime)
-	return ((buttonHoldTime - CHoldTime) / CIterationRate) as Int
+	return ((buttonHoldTime - CHoldTime) * CIterationRate) as Int
 endfunction
 
-State KEY_RIGHT_ARROW
+State KEY_NEXT_POSE
 	function handleKey(int keyCode)
 		self.currentPoseIdx += 1
 	endfunction
@@ -91,7 +158,7 @@ State KEY_RIGHT_ARROW
 		endif
 	endfunction
 EndState
-State KEY_LEFT_ARROW
+State KEY_PREV_POSE
 	function handleKey(int keyCode)
 		self.currentPoseIdx -= 1
 	endfunction
@@ -102,7 +169,7 @@ State KEY_LEFT_ARROW
 	endfunction
 EndState
 ; Pick & View poses from collection
-State KEY_P
+State KEY_VIEW_POSE_COLLECTION
 	function handleKey(int keyCode)
 		int jPoses = self.pickPoseList(headerText = "Pick a pose list to view it"\
 			, suggestedListName = "Rename me"\
@@ -112,11 +179,11 @@ State KEY_P
 			return
 		endif
 
-		self.viewPoseList(jPoses)
+		self.jSourcePoseArray = jPoses
 	endfunction
 EndState
 ; Activate pose list
-State KEY_X
+State KEY_ACTIVATE_POSE_COLLECTION
 	function handleKey(int keyCode)
 		int jPoses = self.pickPoseList(headerText = "Pick a pose list to edit it"\
 			, suggestedListName = "Rename me"\
@@ -129,7 +196,7 @@ State KEY_X
 	endfunction
 EndState
 ; Load poses from ESP
-State KEY_L 
+State KEY_LOAD_FROM_ESP 
 	function handleKey(int keyCode)
 
 		String[] modList = PSM_PosemanagerEntries.getModList()
@@ -145,26 +212,19 @@ State KEY_L
 		; 	return
 		; endif
 
-		Form[] poses = FormReflection.queryFormsFrom(modName, withFormType = 78)
-		if poses.Length == 0
+		int jPoses = PoseList_loadFromPlugin(modName)
+		if !jPoses
 			Notification("No poses in " + modName)
 			return
 		endif
 
 		Notification("Press Alt-F to add a pose into current active pose collection")
 
-		int jPoses = PoseList_make(name = (modName + "-based list"))
-		JArray_insertFormArray(PoseList_getList(jPoses), poses)
-		PSM_PosemanagerEntries.addPoseCollection(jPoses)
-
-		self.viewPoseList(jPoses)
+		Collections_addPoseCollection(jCollections, jPoses)
+		self.jSourcePoseArray = jPoses
 
 	endfunction
 EndState
-
-function viewPoseList(int sourcePoseArray)
-	self.jSourcePoseArray = sourcePoseArray
-endfunction
 
 ;;;;;;;;;;;;;;;;;;;;;
 
@@ -191,16 +251,20 @@ Int Property currentPoseIdx
 	endfunction
 endproperty
 
+function notifyOfStatus()
+	Notification("Viewing pose collection: " + PoseList_describe(self.jSourcePoseArray))
+	Notification("Editing pose collection: " + PoseList_describe(self.jActivePoses))
+endfunction
+
 Int Property jActivePoses
 	int function get()
-		return _jActivePoses
+		return CTX_getEditSlot(jContext)
 	endfunction
 	function set(int o)
-		_jActivePoses = JValue.releaseAndRetain(_jActivePoses, o)
-		Notification("Editing pose collection: " + PoseList_describe(o))
+		CTX_setEditSlot(jContext, o)
+		self.notifyOfStatus()
 	endfunction
 endproperty
-int _jActivePoses = 0
 
 Int Property jActivePosesOrPickOne
 	int function get()
@@ -213,14 +277,29 @@ endproperty
 
 Int Property jSourcePoseArray
 	int function get()
-		return _jSourcePoseArray
+		return CTX_getViewSlot(jContext)
 	endfunction
 	function set(int o)
-		_jSourcePoseArray = JValue.releaseAndRetain(_jSourcePoseArray, o)
-		Notification("Viewing pose collection: " + PoseList_describe(o))
+		CTX_setViewSlot(jContext, o)
+		self.notifyOfStatus()
 	endfunction
 endproperty
-int _jSourcePoseArray = 0
+
+Int Property jContext
+	int function get()
+		return _jContext
+	endfunction
+	function set(int o)
+		_jContext = JValue.releaseAndRetain(_jContext, o)
+	endfunction
+endproperty
+int _jContext = 0
+
+Int Property jCollections
+	int function get()
+		return CTX_getPoseCollections(self.jContext)
+	endfunction
+endproperty
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -233,73 +312,73 @@ int function createPoseCollection(string title, string suggestedCollectionName =
 	endif
 	
 	int jPoses = PoseList_make(listName)
-	PSM_PosemanagerEntries.addPoseCollection(jPoses)
+	Collections_addPoseCollection(jCollections, jPoses)
 	return jPoses
 endfunction
 
 int function pickPoseList(string headerText, string suggestedListName, int jCurrentSelectedCollection = 0)
 
-	string[] poseListsNames = PSM_PosemanagerEntries.getPoseListsNames()
+	string[] poseListsNames = Collections_getCollectionNames(jCollections)
 
-	int iCurrPoseIdx = JArray.findObj(PSM_PosemanagerEntries.getPoseLists(), jCurrentSelectedCollection)
+	int iCurrPoseIdx = JArray.findObj(jCollections, jCurrentSelectedCollection)
 
 	int selectedIdx = uilib.ShowList(headerText, asOptions = poseListsNames, aiStartIndex = iCurrPoseIdx, aiDefaultIndex = -1)
 	if selectedIdx == -1
 		return 0
 	endif
 
-	int jPoses = PSM_PosemanagerEntries.getNthPoseList(selectedIdx)
-	if jPoses == PSM_PosemanagerEntries.dummyPoseCollection()
+	int jPoses = Collections_getNthPoseList(jCollections, selectedIdx)
+	if jPoses == CTX_dummyCollection(self.jContext)
 		jPoses = self.createPoseCollection(title = "Create new pose collection", suggestedCollectionName = "New Collection")
 	endif
 
 	return jPoses
 endfunction
 ; Dump data back
-State KEY_F2
+State KEY_SYNC_DATA
 	function handleKey(int keyCode)
-		PSM_PosemanagerEntries.dumpRoot()
-		Notification("saved collections into the file")
+		self.trySyncDataAfterDelay()
+		Notification("syncing done")
 	endfunction
 EndState
-State KEY_F3
-	function handleKey(int keyCode)
-		PSM_PosemanagerEntries.root(forceLoadFromFile = True)
-		self.listenKeys();
-		Notification("loaded collections from the file")
-	endfunction
-EndState
-State KEY_A
+State KEY_PERFORM_ACTION
 	function handleKey(int keyCode)
 
-		string[] aactions = new string[3]
-		aactions[0] = "Create"
-		aactions[1] = "Delete"
-		aactions[2] = "Rename"
+		string[] aactions = new string[4]
+		aactions[0] = "Nothing"
+		aactions[1] = "Create"
+		aactions[2] = "Delete"
+		aactions[3] = "Rename"
 
-		int selectedIdx = self.uilib.ShowList("Perform action on " + PoseList_describe(self.jActivePoses), asOptions = aactions, aiStartIndex = -1, aiDefaultIndex = -1)
+		int selectedIdx = self.uilib.ShowList(\
+			"Perform action on " + PoseList_describe(self.jActivePoses)\
+			, asOptions = aactions\
+			, aiStartIndex = -1, aiDefaultIndex = 0)
+
 		if selectedIdx == -1
 			return
 		endif
 
 		string act = aactions[selectedIdx]
 		if act == "Create"
-			self.createPoseCollection(title = "Create Pose Collection", suggestedCollectionName = "IDK")
+			self.createPoseCollection(title = "Create New Pose Collection", suggestedCollectionName = "IDK")
 		elseif act == "Delete"
-			PSM_PosemanagerEntries.deletePoseCollection(self.jActivePoses)
+			Collections_deleteCollection(jCollections, self.jActivePoses)
+		elseif act == "Nothing"
+			;
 		else
 			Notification("Action "+act+" is not implemented yet")
 		endif
 	endfunction
 EndState
 
-State KEY_G
+State KEY_FAVORITE_POSE
 	function handleKey(int keyCode)
 		Idle pose = PoseList_currentPose(self.jSourcePoseArray)
 		PoseList_addPose(self.jActivePosesOrPickOne, pose)
 	endfunction
 EndState
-State KEY_U
+State KEY_UNFAVORITE_POSE
 	function handleKey(int keyCode)
 		Idle pose = PoseList_currentPose(self.jSourcePoseArray)
 		PoseList_removePose(self.jActivePosesOrPickOne, pose)
@@ -335,113 +414,3 @@ EndState
 
 ; Any idea is welcomed, but don't expect I'll implement everything you will suggest
 
-
-int property KEY_ESCAPE = 0x01 autoreadonly
-int property KEY_1 = 0x02 autoreadonly
-int property KEY_2 = 0x03 autoreadonly
-int property KEY_3 = 0x04 autoreadonly
-int property KEY_4 = 0x05 autoreadonly
-int property KEY_5 = 0x06 autoreadonly
-int property KEY_6 = 0x07 autoreadonly
-int property KEY_7 = 0x08 autoreadonly
-int property KEY_8 = 0x09 autoreadonly
-int property KEY_9 = 0x0A autoreadonly
-int property KEY_0 = 0x0B autoreadonly
-int property KEY_MINUS = 0x0C autoreadonly
-int property KEY_EQUALS = 0x0D autoreadonly
-int property KEY_BACKSPACE = 0x0E autoreadonly
-int property KEY_TAB = 0x0F autoreadonly
-int property KEY_Q = 0x10 autoreadonly
-int property KEY_W = 0x11 autoreadonly
-int property KEY_E = 0x12 autoreadonly
-int property KEY_R = 0x13 autoreadonly
-int property KEY_T = 0x14 autoreadonly
-int property KEY_Y = 0x15 autoreadonly
-int property KEY_U = 0x16 autoreadonly
-int property KEY_I = 0x17 autoreadonly
-int property KEY_O = 0x18 autoreadonly
-int property KEY_P = 0x19 autoreadonly
-int property KEY_LEFT_BRACKET = 0x1A autoreadonly
-int property KEY_RIGHT_BRACKET = 0x1B autoreadonly
-int property KEY_ENTER = 0x1C autoreadonly
-int property KEY_LEFT_CONTROL = 0x1D autoreadonly
-int property KEY_A = 0x1E autoreadonly
-int property KEY_S = 0x1F autoreadonly
-int property KEY_D = 0x20 autoreadonly
-int property KEY_F = 0x21 autoreadonly
-int property KEY_G = 0x22 autoreadonly
-int property KEY_H = 0x23 autoreadonly
-int property KEY_J = 0x24 autoreadonly
-int property KEY_K = 0x25 autoreadonly
-int property KEY_L = 0x26 autoreadonly
-int property KEY_SEMICOLON = 0x27 autoreadonly
-int property KEY_APOSTROPHE = 0x28 autoreadonly
-int property KEY_TILDE = 0x29 autoreadonly
-int property KEY_LEFT_SHIFT = 0x2A autoreadonly
-int property KEY_BACK_SLASH = 0x2B autoreadonly
-int property KEY_Z = 0x2C autoreadonly
-int property KEY_X = 0x2D autoreadonly
-int property KEY_C = 0x2E autoreadonly
-int property KEY_V = 0x2F autoreadonly
-int property KEY_B = 0x30 autoreadonly
-int property KEY_N = 0x31 autoreadonly
-int property KEY_M = 0x32 autoreadonly
-int property KEY_COMMA = 0x33 autoreadonly
-int property KEY_PERIOD = 0x34 autoreadonly
-int property KEY_FORWARD_SLASH = 0x35 autoreadonly
-int property KEY_RIGHT_SHIFT = 0x36 autoreadonly
-int property KEY_NUM_MULTIPLY = 0x37 autoreadonly
-int property KEY_LEFT_ALT = 0x38 autoreadonly
-int property KEY_SPACEBAR = 0x39 autoreadonly
-int property KEY_CAPS_LOCK = 0x3A autoreadonly
-int property KEY_F1 = 0x3B autoreadonly
-int property KEY_F2 = 0x3C autoreadonly
-int property KEY_F3 = 0x3D autoreadonly
-int property KEY_F4 = 0x3E autoreadonly
-int property KEY_F5 = 0x3F autoreadonly
-int property KEY_F6 = 0x40 autoreadonly
-int property KEY_F7 = 0x41 autoreadonly
-int property KEY_F8 = 0x42 autoreadonly
-int property KEY_F9 = 0x43 autoreadonly
-int property KEY_F10 = 0x44 autoreadonly
-int property KEY_NUM_LOCK = 0x45 autoreadonly
-int property KEY_SCROLL_LOCK = 0x46 autoreadonly
-int property KEY_NUM7 = 0x47 autoreadonly
-int property KEY_NUM8 = 0x48 autoreadonly
-int property KEY_NUM9 = 0x49 autoreadonly
-int property KEY_NUM_MINUS = 0x4A autoreadonly
-int property KEY_NUM4 = 0x4B autoreadonly
-int property KEY_NUM5 = 0x4C autoreadonly
-int property KEY_NUM6 = 0x4D autoreadonly
-int property KEY_NUM_PLUS = 0x4E autoreadonly
-int property KEY_NUM1 = 0x4F autoreadonly
-int property KEY_NUM2 = 0x50 autoreadonly
-int property KEY_NUM3 = 0x51 autoreadonly
-int property KEY_NUM0 = 0x52 autoreadonly
-int property KEY_NUM_DOT = 0x53 autoreadonly
-int property KEY_F11 = 0x57 autoreadonly
-int property KEY_F12 = 0x58 autoreadonly
-int property KEY_NUM_ENTER = 0x9C autoreadonly
-int property KEY_RIGHT_CONTROL = 0x9D autoreadonly
-int property KEY_NUM_DIVIDE = 0xB5 autoreadonly
-int property KEY_RIGHT_ALT = 0xB8 autoreadonly
-int property KEY_HOME = 0xC7 autoreadonly
-int property KEY_UP_ARROW = 0xC8 autoreadonly
-int property KEY_PG_UP = 0xC9 autoreadonly
-int property KEY_LEFT_ARROW = 0xCB autoreadonly
-int property KEY_RIGHT_ARROW = 0xCD autoreadonly
-int property KEY_END = 0xCF autoreadonly
-int property KEY_DOWN_ARROW = 0xD0 autoreadonly
-int property KEY_PG_DOWN = 0xD1 autoreadonly
-int property KEY_INSERT = 0xD2 autoreadonly
-int property KEY_DELETE = 0xD3 autoreadonly
-int property KEY_LEFT_MOUSE_BUTTON = 0x100 autoreadonly
-int property KEY_RIGHT_MOUSE_BUTTON = 0x101 autoreadonly
-int property KEY_MIDDLE_MOUSE_BUTTON = 0x102 autoreadonly
-int property KEY_MOUSE_BUTTON3 = 0x103 autoreadonly
-int property KEY_MOUSE_BUTTON4 = 0x104 autoreadonly
-int property KEY_MOUSE_BUTTON5 = 0x105 autoreadonly
-int property KEY_MOUSE_BUTTON6 = 0x106 autoreadonly
-int property KEY_MOUSE_BUTTON7 = 0x107 autoreadonly
-int property KEY_MOUSE_WHEEL_UP = 0x108 autoreadonly
-int property KEY_MOUSE_WHEEL_DOWN = 0x109 autoreadonly

@@ -1,0 +1,18 @@
+{
+  "fileVersion": 1,
+  "altKey": 56,
+  "handlers": {
+    "205": "KEY_NEXT_POSE",
+    "__metaInfo": {
+      "typeName": "JIntMap"
+    },
+    "34": "KEY_FAVORITE_POSE",
+    "22": "KEY_UNFAVORITE_POSE",
+    "60": "KEY_SYNC_DATA",
+    "38": "KEY_LOAD_FROM_ESP",
+    "0x18": "KEY_VIEW_POSE_COLLECTION",
+    "30": "KEY_PERFORM_ACTION",
+    "45": "KEY_ACTIVATE_POSE_COLLECTION",
+    "203": "KEY_PREV_POSE"
+  }
+}

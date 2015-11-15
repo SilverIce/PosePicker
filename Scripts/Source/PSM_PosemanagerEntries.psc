@@ -1,6 +1,7 @@
 Scriptname PSM_PosemanagerEntries
 
 import JMap
+import MiscUtil
 
 function Pose_setName(Idle pose, string name) global
 	JFormDB.setStr(pose, ".PosePicker.name", name)
@@ -17,12 +18,22 @@ int function PoseList_make(string name) global
 	setObj(list, "poses", JArray.object())
 	return list
 endfunction
+int function PoseList_loadFromPlugin(string pluginName) global
+	Form[] poses = FormReflection.queryFormsFrom(pluginName, withFormType = 78)
+	if poses.Length == 0
+		return 0
+	endif
+
+	int jPoses = PoseList_make(name = (pluginName + "-based list"))
+	JArray_insertFormArray(PoseList_getList(jPoses), poses)
+	return jPoses
+endfunction
 string function PoseList_getName(int list) global
 	return getStr(list, "name")
 endfunction
 string function PoseList_describe(int list) global
 	if list
-		return PoseList_getName(list)+", "+JValue.count(PoseList_getList(list))+" poses"
+		return PoseList_getName(list)+", "+PoseList_poseCount(list)+" poses"
 	else
 		return "'pose collection doesn't exist'"
 	endif
@@ -58,7 +69,7 @@ int function PoseList_poseIndex(int list) global
 	return getInt(list, "poseIdx")
 endfunction
 int function PoseList_setPoseIndex(int list, int index) global
-	int count = JValue.count(PoseList_getList(list))
+	int count = PoseList_poseCount(list)
 	int idx = (index + count) % count
 	setInt(list, "poseIdx", idx)
 	return idx
@@ -67,56 +78,100 @@ Idle function PoseList_currentPose(int list) global
 	return JArray.getForm(PoseList_getList(list), PoseList_poseIndex(list)) as Idle
 endfunction
 
-; Globals
+;;;;;;;;;;;;; Key Handler
 
-; int function getCurrentPoseList() global
-; 	return JDB.solveInt(".PosePicker.currentPoseLis")
-; endfunction
-; function setCurrentPoseList(int jlist) global
-; 	JDB.solveIntSetter(".PosePicker.currentPoseLis", jlist, createMissingKeys = true)
-; endfunction
-
-int function root(bool forceLoadFromFile = false) global
-	return JSONFileCache(".PosePicker", "Data/Scripts/Source/PSM_PosePickerStruct.json", forceRefresh = forceLoadFromFile)
+int function KHConf_getAltKeyCode(int jConfig) global
+	return getInt(jConfig, "altKey")
 endfunction
 
-function dumpRoot() global
-	JValue.writeToFile(root(), "Data/Scripts/Source/PSM_PosePickerStruct.json")
+function KHConf_setAltKeyCode(int jConfig, int keyCode) global
+	setInt(jConfig, "altKey", keyCode)
 endfunction
 
-int function getPoseLists() global
-	return JValue.solveObj(root(), ".poseLists")
+int function KHConf_getKeyHandlers(int jConfig) global
+	return getObj(jConfig, "handlers")
 endfunction
 
-int function keyCode2Handler() global
-	return JValue.solveObj(root(), ".keyCode2Handler")
+string function KHConf_getKeyHandler(int jConfig, int keyCode) global
+	return JValue.solveStr(jConfig, ".handlers[" + keyCode + "]")
 endfunction
 
-string[] function getPoseListsNames() global
+function KHConf_setKeyCodeForHandler(int jConfig, int keyCode, string handler) global
+	int keys2handlers = getObj(jConfig, "handlers")
+	int handlers = JIntMap.allValues(keys2handlers)
+	int pairIdx = JArray.findStr(handlers, handler)
+
+	;JValue.evalLuaInt(jConfig, "return jc.find(jobject.handlers, function(v) v ==  end)")
+
+	if pairIdx != -1
+		int oldKeyCode = JIntMap.getNthKey(keys2handlers, pairIdx);
+		JIntMap.removeKey(keys2handlers, oldKeyCode)
+		JIntMap.setStr(keys2handlers, keyCode, handler)
+
+		int evt = ModEvent.Create("PSM_KHConf_setKeyCodeForHandler")
+		ModEvent.PushInt(evt, jConfig)
+		ModEvent.PushInt(evt, oldKeyCode)
+		ModEvent.PushInt(evt, keyCode)
+		ModEvent.Send(evt)
+	endif
+	JValue.zeroLifetime(handlers)
+endfunction
+
+int function KHConf_singleton(int jLocalObj) global
+	return JSONFile_sync(jLocalObj, "Data/Scripts/Source/PSM_KeyHandlerConfig.json")
+endfunction
+
+;;;;;;;;;;;;;;;;;;; View & Edit context
+
+int function CTX_singleton(int jLocalObj) global
+	return JSONFile_sync(jLocalObj, "Data/Scripts/Source/PSM_PosePickerStruct.json")
+endfunction
+
+function CTX_setViewSlot(int jCTX, int jPoses) global
+	setObj(jCTX, "viewSlot", jPoses)
+endfunction
+int function CTX_getViewSlot(int jCTX) global
+	return getObj(jCTX, "viewSlot")
+endfunction
+function CTX_setEditSlot(int jCTX, int jPoses) global
+	setObj(jCTX, "editSlot", jPoses)
+endfunction
+int function CTX_getEditSlot(int jCTX) global
+	return getObj(jCTX, "editSlot")
+endfunction
+
+int function CTX_getPoseCollections(int jCTX) global
+	return getObj(jCTX, "poseCollections")
+endfunction
+
+int function CTX_dummyCollection(int jCTX) global
+	return getObj(jCTX, "dummyCreateCollection")
+endfunction
+
+;;;;;;;;;;;;;;;;;; List of pose collections
+
+
+string[] function Collections_getCollectionNames(int jCollections) global
 	string lua = "return PosePicker.foldl(jobject, JArray.object(), function(pose, init) JArray.insert(init, pose.name); return init end)"
-	string[] poseNames = JArray_toStringArray(JValue.evalLuaObj(getPoseLists(), lua))
+	string[] poseNames = JArray_toStringArray(JValue.evalLuaObj(jCollections, lua))
 	return poseNames
 endfunction
 
-int function dummyPoseCollection() global
-	return JValue.solveObj(root(), ".dummyCreateCollection")
-endfunction
-
-int function getNthPoseList(int idx) global
-	int jPoses = JArray.getObj(getPoseLists(), idx)
+int function Collections_getNthPoseList(int jCollections, int idx) global
+	int jPoses = JArray.getObj(jCollections, idx)
 	return jPoses
 endfunction
 
-function addPoseCollection(int jPoses) global
-	if jPoses && JArray.findObj(getPoseLists(), jPoses) == -1
-		JArray.addObj(getPoseLists(), jPoses)
+function Collections_addPoseCollection(int jCollections, int jPoses) global
+	if jPoses && JArray.findObj(jCollections, jPoses) == -1
+		JArray.addObj(jCollections, jPoses)
 	endif
 endfunction
 
-function deletePoseCollection(int jPoses) global
-	int idx = JArray.findObj(getPoseLists(), jPoses)
+function Collections_deleteCollection(int jCollections, int jPoses) global
+	int idx = JArray.findObj(jCollections, jPoses)
 	if idx != -1
-		JArray.eraseIndex(getPoseLists(), idx)
+		JArray.eraseIndex(jCollections, idx)
 	endif
 endfunction
 
@@ -160,3 +215,37 @@ int function JArray_insertFormArray(int obj, Form[] forms, int insertAt = -1) gl
 	return obj
 endfunction
 
+;;;;;;;;;;;;;;;;;;;;;; JSONFile
+
+; int function JSONFile_make(string filePath)
+; 	return JValue.objectFromPrototype("{ \"filePath\": \""+ filePath +"\" }")
+; endfunction
+
+; int function JSONFile_root(int ijFile, int sessionUID)
+; 	if getInt(ijFile, "tick") != sessionUID
+; 		setInt(ijFile, "tick", sessionUID)
+; 		setObj(ijFile, "root", JValue.readFromFile(getStr(ijFile, "filePath")))
+; 	endif
+; 	return getObj(ijFile, "root")
+; endfunction
+
+int function JSONFile_sync(int jLocalObj, string filePath) global
+
+	int jConfigTemplate = JValue.readFromFile(filePath)
+
+	if getFlt(jLocalObj, "fileVersion", -1.0) < getFlt(jConfigTemplate, "fileVersion")
+		PrintConsole("Syncing " + filePath + ". Remove file chosen: " + jConfigTemplate)
+		return jConfigTemplate
+	elseif getFlt(jLocalObj, "fileVersion") > getFlt(jConfigTemplate, "fileVersion")
+		JValue.writeToFile(jLocalObj, filePath)
+	endif
+
+	PrintConsole("Syncing " + filePath + ". Local file chosen: " + jLocalObj)
+	JValue.zeroLifetime(jConfigTemplate)
+	return jLocalObj
+
+endfunction
+
+function JSONFile_onChanged(int jLocalObj) global
+	setFlt(jLocalObj, "fileVersion", JValue.evalLuaFlt(0, "return os.time()"))
+endfunction
