@@ -47,6 +47,7 @@ bool _isSyncDelayed = False
 
 function trySyncDataAfterDelay(float delay = 5.0)
 	if _isSyncDelayed == False
+		_isSyncDelayed = True
 		self.RegisterForSingleUpdate(delay)
 	endif
 endfunction
