@@ -231,21 +231,43 @@ endfunction
 
 int function JSONFile_sync(int jLocalObj, string filePath) global
 
-	int jConfigTemplate = JValue.readFromFile(filePath)
+	string lightweightFilePath = filePath + ".filedate"
+	int jFileDate = JValue.readFromFile(lightweightFilePath)
+	int jSelectedObj = jLocalObj
 
-	if getFlt(jLocalObj, "fileVersion", -1.0) < getFlt(jConfigTemplate, "fileVersion")
-		PrintConsole("Syncing " + filePath + ". Remove file chosen: " + jConfigTemplate)
-		return jConfigTemplate
-	elseif getFlt(jLocalObj, "fileVersion") > getFlt(jConfigTemplate, "fileVersion")
+	float localDate = JSONFile_modifyDate(jLocalObj)
+	float fileDate = JSONFile_modifyDate(jFileDate)
+
+	if localDate < fileDate
+		
+		int jRemoteFile = JValue.readFromFile(filePath)
+
+		if JSONFile_modifyDate(jRemoteFile) > localDate
+			PrintConsole("Syncing " + filePath + ". Remote file chosen: " + jRemoteFile)
+			jSelectedObj = jRemoteFile
+		endif
+
+	elseif localDate > fileDate
+		if !jFileDate
+			jFileDate = object()
+		endif
+		setFlt(jFileDate, "fileVersion", localDate)
+		JValue.writeToFile(jFileDate, lightweightFilePath)
 		JValue.writeToFile(jLocalObj, filePath)
 	endif
 
+	JValue.zeroLifetime(jFileDate)
+
 	PrintConsole("Syncing " + filePath + ". Local file chosen: " + jLocalObj)
-	JValue.zeroLifetime(jConfigTemplate)
-	return jLocalObj
+
+	return jSelectedObj
 
 endfunction
 
 function JSONFile_onChanged(int jLocalObj) global
 	setFlt(jLocalObj, "fileVersion", JValue.evalLuaFlt(0, "return os.time()"))
+endfunction
+
+float function JSONFile_modifyDate(int jLocalObj) global
+	return getFlt(jLocalObj, "fileVersion")
 endfunction
