@@ -124,7 +124,7 @@ endfunction
 ;;;;;;;;;;;;;;;;;;; View & Edit context
 
 int function CTX_singleton(int jLocalObj) global
-	return JSONFile_sync(jLocalObj, "Data/Scripts/Source/PSM_PosePickerStruct.json")
+	return JSONFile_syncLargeFile(jLocalObj, "Data/Scripts/Source/PSM_PosePickerStruct.json")
 endfunction
 
 function CTX_setViewSlot(int jCTX, int jPoses) global
@@ -229,7 +229,25 @@ endfunction
 ; 	return getObj(ijFile, "root")
 ; endfunction
 
+
 int function JSONFile_sync(int jLocalObj, string filePath) global
+
+	int jConfigTemplate = JValue.readFromFile(filePath)
+
+	if getFlt(jLocalObj, "fileVersion", -1.0) < getFlt(jConfigTemplate, "fileVersion")
+		PrintConsole("Syncing " + filePath + ". Remove file chosen: " + jConfigTemplate)
+		return jConfigTemplate
+	elseif getFlt(jLocalObj, "fileVersion") > getFlt(jConfigTemplate, "fileVersion")
+		JValue.writeToFile(jLocalObj, filePath)
+	endif
+
+	PrintConsole("Syncing " + filePath + ". Local file chosen: " + jLocalObj)
+	JValue.zeroLifetime(jConfigTemplate)
+	return jLocalObj
+
+endfunction
+
+int function JSONFile_syncLargeFile(int jLocalObj, string filePath) global
 
 	string lightweightFilePath = filePath + ".filedate"
 	int jFileDate = JValue.readFromFile(lightweightFilePath)
