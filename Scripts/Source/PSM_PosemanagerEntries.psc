@@ -11,6 +11,37 @@ string function Pose_getName(Idle pose) global
 endfunction
 
 
+;;;;;;;;;;;;
+int function PoseListLightWeight_make(int jPoseList) global
+	if !jPoseList
+		return 0
+	endif
+
+	string filePath = PoseListLightWeight_getFilePath(jPoseList)
+	JValue.writeToFile(jPoseList, filePath)
+
+	int list = object()
+	setStr(list, "name", PoseList_getName(jPoseList))
+	setInt(list, "poseIdx", PoseList_poseIndex(jPoseList))
+	return list
+endfunction
+
+int function PoseListLightWeight_getPoseList(int jPoseList) global
+	if !jPoseList
+		return 0
+	endif
+
+	int list = JValue.readFromFile(PoseListLightWeight_getFilePath(jPoseList))
+	PoseList_setPoseIndex(list, PoseList_poseIndex(list))
+	return list
+endfunction
+
+string function PoseListLightWeight_getFilePath(int jPoseList) global
+	return "Data/PosePicker/PoseCollections/" + PoseList_getName(jPoseList) + ".json"
+endfunction
+
+;;;;;;;;;;;;;;;; PoseList
+
 int function PoseList_make(string name) global
 	int list = object()
 	setStr(list, "name", name)
