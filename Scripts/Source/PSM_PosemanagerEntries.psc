@@ -231,55 +231,21 @@ endfunction
 
 
 int function JSONFile_sync(int jLocalObj, string filePath) global
-
-	int jConfigTemplate = JValue.readFromFile(filePath)
-
-	if getFlt(jLocalObj, "fileVersion", -1.0) < getFlt(jConfigTemplate, "fileVersion")
-		PrintConsole("Syncing " + filePath + ". Remove file chosen: " + jConfigTemplate)
-		return jConfigTemplate
-	elseif getFlt(jLocalObj, "fileVersion") > getFlt(jConfigTemplate, "fileVersion")
-		JValue.writeToFile(jLocalObj, filePath)
-	endif
-
-	PrintConsole("Syncing " + filePath + ". Local file chosen: " + jLocalObj)
-	JValue.zeroLifetime(jConfigTemplate)
-	return jLocalObj
-
+	int jTransport = object()
+	setObj(jTransport, "jLocalObj", jLocalObj)
+	setStr(jTransport, "filePath", filePath)
+	int jSelectedObj = JValue.evalLuaObj(jTransport, "return PosePicker.syncJSONFile(jobject.jLocalObj, jobject.filePath)", jLocalObj)
+	JValue.zeroLifetime(jTransport)
+	return jSelectedObj
 endfunction
 
 int function JSONFile_syncLargeFile(int jLocalObj, string filePath) global
-
-	string lightweightFilePath = filePath + ".filedate"
-	int jFileDate = JValue.readFromFile(lightweightFilePath)
-	int jSelectedObj = jLocalObj
-
-	float localDate = JSONFile_modifyDate(jLocalObj)
-	float fileDate = JSONFile_modifyDate(jFileDate)
-
-	if localDate < fileDate
-		
-		int jRemoteFile = JValue.readFromFile(filePath)
-
-		if JSONFile_modifyDate(jRemoteFile) > localDate
-			PrintConsole("Syncing " + filePath + ". Remote file chosen: " + jRemoteFile)
-			jSelectedObj = jRemoteFile
-		endif
-
-	elseif localDate > fileDate
-		if !jFileDate
-			jFileDate = object()
-		endif
-		setFlt(jFileDate, "fileVersion", localDate)
-		JValue.writeToFile(jFileDate, lightweightFilePath)
-		JValue.writeToFile(jLocalObj, filePath)
-	endif
-
-	JValue.zeroLifetime(jFileDate)
-
-	PrintConsole("Syncing " + filePath + ". Local file chosen: " + jLocalObj)
-
+	int jTransport = object()
+	setObj(jTransport, "jLocalObj", jLocalObj)
+	setStr(jTransport, "filePath", filePath)
+	int jSelectedObj = JValue.evalLuaObj(jTransport, "return PosePicker.syncLargeJSONFile(jobject.jLocalObj, jobject.filePath)", jLocalObj)
+	JValue.zeroLifetime(jTransport)
 	return jSelectedObj
-
 endfunction
 
 function JSONFile_onChanged(int jLocalObj) global
