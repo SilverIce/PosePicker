@@ -23,3 +23,30 @@ Just in case, JContainers 3.2.5, SKSE is required
 ## Legal stuff
 
 I'm, Earen at <slifeleaf@gmail.com>, the author of the following mod. Don't reupload, sell the mod without my permission
+
+## Ideas, plans etc
+
+
+What to sync:
+- pose lists
+- collection name
+
+Not sync:
+- current pose index
+- selected active collections
+
+- It's probably bad idea to share currently selected pose collection & the collection in the Edit-slot
+	- because we stopped, saved state and we expect that the state will be the same next time the save will be loaded (or almost the same)
+	- i.e. we expect the same active pose collections
+- Move pose lists into SEPARATE files (due to possible performance issues?)
+	- such files will contain pose list only!!
+	- main json file will still contain collection entries??
+	- 
+
+main json:
+
+{
+	collections: [
+		
+	]
+}

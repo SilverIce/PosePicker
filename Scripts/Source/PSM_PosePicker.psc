@@ -29,6 +29,12 @@ import MiscUtil
 ; 	self.jContext = CTX_singleton()
 ; EndEvent
 
+Event OnInit()
+	; PrintConsole("iniiiiiiiiiiiiiiiiit")
+	self.jContext = CTX_object()
+
+	self.syncData()
+EndEvent
 
 ;;;;;;;;;;;;;;;;; AutoSyncing
 
@@ -39,7 +45,7 @@ EndEvent
 
 function syncData()
 	self.jKeyConf = KHConf_singleton(self.jKeyConf)
-	self.jContext = CTX_singleton(self.jContext)
+	CTX_syncActiveCollections(self.jContext)
 	PrintConsole("Syncing data")
 endfunction
 
@@ -93,7 +99,6 @@ Event OnKeyDown(int keyCode)
 		self.handleKey(0)
 		self.GoToState(prevState)
 
-		JSONFile_onChanged(self.jContext)
 		self.trySyncDataAfterDelay()
 	endif
 EndEvent
@@ -110,7 +115,6 @@ Event OnKeyUp(int keyCode, float holdTime)
 		self.handleKeyUp(0, holdTime)
 		self.GoToState(prevState)
 
-		JSONFile_onChanged(self.jContext)
 		self.trySyncDataAfterDelay()
 	endif
 EndEvent
@@ -221,7 +225,7 @@ State KEY_LOAD_FROM_ESP
 
 		Notification("Press Alt-F to add a pose into current active pose collection")
 
-		Collections_addPoseCollection(jCollections, jPoses)
+		CTX_addPoseCollection(self.jContext, jPoses)
 		self.jSourcePoseArray = jPoses
 
 	endfunction
@@ -246,8 +250,9 @@ Int Property currentPoseIdx
 		PrintConsole(text)
 
 		Idle pose = PoseList_currentPose(self.jSourcePoseArray)
-		if pose
-			Game.GetPlayer().PlayIdle(pose)
+		Actor player = Game.GetPlayer()
+		if pose && player && !player.IsOnMount()
+			player.PlayIdle(pose)
 		endif
 	endfunction
 endproperty
@@ -296,42 +301,40 @@ Int Property jContext
 endproperty
 int _jContext = 0
 
-Int Property jCollections
-	int function get()
-		return CTX_getPoseCollections(self.jContext)
-	endfunction
-endproperty
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 int function createPoseCollection(string title, string suggestedCollectionName = "Collection Name")
+
 	string listName = self.uilib.ShowTextInput(title, suggestedCollectionName)
 
-	if !listName
-		Notification("No collections created")
+	if CTX_isCollectionWithNameExists(self.jContext, listName)
+		Notification("No collection created")
 		return 0
 	endif
 	
 	int jPoses = PoseList_make(listName)
-	Collections_addPoseCollection(jCollections, jPoses)
+	CTX_addPoseCollection(self.jContext, jPoses)
 	return jPoses
 endfunction
 
 int function pickPoseList(string headerText, string suggestedListName, int jCurrentSelectedCollection = 0)
 
-	string[] poseListsNames = Collections_getCollectionNames(jCollections)
+	string[] poseListsNames = CTX_getCollectionNames(self.jContext)
 
-	int iCurrPoseIdx = JArray.findObj(jCollections, jCurrentSelectedCollection)
+	int iCurrPoseIdx = poseListsNames.Find(PoseList_getName(jCurrentSelectedCollection))
 
 	int selectedIdx = uilib.ShowList(headerText, asOptions = poseListsNames, aiStartIndex = iCurrPoseIdx, aiDefaultIndex = -1)
 	if selectedIdx == -1
 		return 0
 	endif
 
-	int jPoses = Collections_getNthPoseList(jCollections, selectedIdx)
-	if jPoses == CTX_dummyCollection(self.jContext)
-		jPoses = self.createPoseCollection(title = "Create new pose collection", suggestedCollectionName = "New Collection")
-	endif
+	int jPoses = CTX_getCollectionWithName(self.jContext, poseListsNames[selectedIdx])
+
+	; if jPoses == CTX_dummyCollection(self.jContext)
+	; 	jPoses = self.createPoseCollection(title = "Create new pose collection", suggestedCollectionName = "New Collection")
+	; endif
+
+	PrintConsole("pickPoseList: " + PoseList_describe(jPoses) + " picked")
 
 	return jPoses
 endfunction
@@ -364,7 +367,7 @@ State KEY_PERFORM_ACTION
 		if act == "Create"
 			self.createPoseCollection(title = "Create New Pose Collection", suggestedCollectionName = "IDK")
 		elseif act == "Delete"
-			Collections_deleteCollection(jCollections, self.jActivePoses)
+			CTX_deleteCollection(self.jContext, self.jActivePoses)
 		elseif act == "Nothing"
 			;
 		else

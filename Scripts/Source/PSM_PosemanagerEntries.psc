@@ -28,8 +28,24 @@ int function PoseList_loadFromPlugin(string pluginName) global
 	JArray_insertFormArray(PoseList_getList(jPoses), poses)
 	return jPoses
 endfunction
+int function PoseList_loadFromFile(string collectionName) global
+	int jPoses = JValue.readFromFile(__collectionNameToPath(collectionName))
+	PrintConsole("PoseList_loadFromFile: loading " + collectionName + " at " + __collectionNameToPath(collectionName) + ": " + jPoses)
+	if !jPoses
+		PrintConsole("PoseList_loadFromFile: can't load " + collectionName + " at " + __collectionNameToPath(collectionName))
+	endif
+	PoseList_setName(jPoses, collectionName)
+	return jPoses
+endfunction
+string function PoseList_filePath(int list) global
+	return __collectionNameToPath(PoseList_getName(list))
+endfunction
 string function PoseList_getName(int list) global
 	return getStr(list, "name")
+endfunction
+function PoseList_setName(int list, string name) global
+	setStr(list, "name", name)
+	JSONFile_onChanged(list)
 endfunction
 string function PoseList_describe(int list) global
 	if list
@@ -49,10 +65,12 @@ int function PoseList_findPose(int list, Idle pose) global
 endfunction
 function PoseList_setPoses(int list, Form[] poses) global
 	setObj(list, "poses", JArray_insertFormArray(JArray.object(), poses))
+	JSONFile_onChanged(list)
 endfunction
 function PoseList_addPose(int list, Idle pose) global
 	if PoseList_findPose(list, pose) == -1
 		JArray.addForm(PoseList_getList(list), pose)
+		JSONFile_onChanged(list)
 	endif
 endfunction
 function PoseList_removePose(int list, Idle pose) global
@@ -62,6 +80,7 @@ function PoseList_removePose(int list, Idle pose) global
 		if idx < PoseList_poseIndex(list)
 			PoseList_setPoseIndex(list, PoseList_poseIndex(list) - 1)
 		endif
+		JSONFile_onChanged(list)
 	endif
 endfunction
 
@@ -72,6 +91,7 @@ int function PoseList_setPoseIndex(int list, int index) global
 	int count = PoseList_poseCount(list)
 	int idx = (index + count) % count
 	setInt(list, "poseIdx", idx)
+	JSONFile_onChanged(list)
 	return idx
 endfunction
 Idle function PoseList_currentPose(int list) global
@@ -123,13 +143,14 @@ endfunction
 
 ;;;;;;;;;;;;;;;;;;; View & Edit context
 
-int function CTX_singleton(int jLocalObj) global
-	return JSONFile_syncLargeFile(jLocalObj, "Data/Scripts/Source/PSM_PosePickerStruct.json")
+int function CTX_object() global
+	return JValue.readFromFile("Data/Scripts/Source/PSM_PosePickerStruct.json")
 endfunction
 
 function CTX_setViewSlot(int jCTX, int jPoses) global
 	setObj(jCTX, "viewSlot", jPoses)
 endfunction
+
 int function CTX_getViewSlot(int jCTX) global
 	return getObj(jCTX, "viewSlot")
 endfunction
@@ -140,39 +161,76 @@ int function CTX_getEditSlot(int jCTX) global
 	return getObj(jCTX, "editSlot")
 endfunction
 
-int function CTX_getPoseCollections(int jCTX) global
-	return getObj(jCTX, "poseCollections")
-endfunction
-
 int function CTX_dummyCollection(int jCTX) global
 	return getObj(jCTX, "dummyCreateCollection")
 endfunction
 
-;;;;;;;;;;;;;;;;;; List of pose collections
+;;; IO
 
+function CTX_syncActiveCollections(int jCTX) global
+	int jView = CTX_getViewSlot(jCTX)
+	if jView
+		CTX_setViewSlot(jCTX, JSONFile_sync(jView, PoseList_filePath(jView)))
+	endif
 
-string[] function Collections_getCollectionNames(int jCollections) global
-	string lua = "return PosePicker.foldl(jobject, JArray.object(), function(pose, init) JArray.insert(init, pose.name); return init end)"
-	string[] poseNames = JArray_toStringArray(JValue.evalLuaObj(jCollections, lua))
+	int jEdit = CTX_getEditSlot(jCTX)
+	if jEdit && jEdit != jView
+		CTX_setEditSlot(jCTX, JSONFile_sync(jEdit, PoseList_filePath(jEdit)))
+	endif
+endfunction
+
+int function CTX_getCollectionWithName(int jCTX, string name) global
+	if name == PoseList_getName( CTX_getViewSlot(jCTX) )
+		return CTX_getViewSlot(jCTX)
+	elseif name == PoseList_getName( CTX_getEditSlot(jCTX) )
+		return CTX_getEditSlot(jCTX)
+	else
+		return PoseList_loadFromFile(name)
+	endif
+endfunction
+
+;;;;;;
+string function __poseFileExt() global
+	return ".json"
+endfunction
+string function __collectionsPath() global
+	return "Data/PosePicker/PoseCollections/"
+endfunction
+string function __collectionNameToPath(string name) global
+	if name != ""
+		return __collectionsPath() + name + __poseFileExt()
+	else
+		return ""
+	endif
+endfunction
+
+string[] function CTX_getCollectionNames(int jCTX) global
+	; I'd return just a list of files in some directory
+	string[] poseNames = FormReflection.listFilesInDirectory(__collectionsPath(), __poseFileExt())
+	Int i = 0
+	while i < poseNames.Length
+		poseNames[i] = FormReflection.replaceExtension(FormReflection.fileNameFromPath(poseNames[i]), "")
+		i += 1
+	endwhile
 	return poseNames
 endfunction
 
-int function Collections_getNthPoseList(int jCollections, int idx) global
-	int jPoses = JArray.getObj(jCollections, idx)
-	return jPoses
+function CTX_addPoseCollection(int jCTX, int jPoses) global
+	JValue.writeToFile(jPoses, PoseList_filePath(jPoses))
 endfunction
 
-function Collections_addPoseCollection(int jCollections, int jPoses) global
-	if jPoses && JArray.findObj(jCollections, jPoses) == -1
-		JArray.addObj(jCollections, jPoses)
-	endif
+bool function CTX_isCollectionWithNameExists(int jCTX, string name) global
+	return JContainers.fileExistsAtPath(__collectionNameToPath(name))
 endfunction
 
-function Collections_deleteCollection(int jCollections, int jPoses) global
-	int idx = JArray.findObj(jCollections, jPoses)
-	if idx != -1
-		JArray.eraseIndex(jCollections, idx)
+function CTX_deleteCollection(int jCTX, int jPoses) global
+	if CTX_getEditSlot(jCTX) == jPoses
+		CTX_setEditSlot(jCTX, 0)
 	endif
+	if CTX_getViewSlot(jCTX) == jPoses
+		CTX_setViewSlot(jCTX, 0)
+	endif
+	JContainers.removeFileAtPath(PoseList_filePath(jPoses))
 endfunction
 
 ;;;; Utils ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -197,14 +255,14 @@ string[] function JArray_toStringArray(int obj) global
 	return mods
 endfunction
 
-int function JSONFileCache(string keyPath, string file, bool forceRefresh = false) global
-	int jfile = JDB.solveObj(keyPath)
-	if !jfile || forceRefresh
-		jfile = JValue.readFromFile(file)
-		JDB.solveObjSetter(keyPath, jfile, createMissingKeys = True)
-	endif
-	return jfile
-endfunction
+; int function JSONFileCache(string keyPath, string file, bool forceRefresh = false) global
+; 	int jfile = JDB.solveObj(keyPath)
+; 	if !jfile || forceRefresh
+; 		jfile = JValue.readFromFile(file)
+; 		JDB.solveObjSetter(keyPath, jfile, createMissingKeys = True)
+; 	endif
+; 	return jfile
+; endfunction
 
 int function JArray_insertFormArray(int obj, Form[] forms, int insertAt = -1) global
 	int i = 0

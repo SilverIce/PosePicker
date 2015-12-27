@@ -9,11 +9,20 @@ end
 
 -----
 
+local function fromMaybe(defValue, maybe)
+  return maybe ~= nil and maybe or defValue
+end
+
 function T.syncJSONFile(jLocalObj, filePath)
   local remoteObj = JValue.readFromFile(filePath)
-  if jLocalObj == nil or remoteObj.fileVersion < jConfigTemplate.fileVersion then
+  local remoteFileVersion = fromMaybe(0, remoteObj and remoteObj.fileVersion or nil)
+  local localFileVersion = fromMaybe(0, jLocalObj and jLocalObj.fileVersion or nil)
+
+  if not remoteObj then
+    return nil  -- if no remote file, then the file was deleted, local data should be set to nil too
+  elseif not jLocalObj or localFileVersion < remoteFileVersion then
     return remoteObj
-  elseif jLocalObj.fileVersion > remoteObj.fileVersion then
+  elseif remoteObj and localFileVersion > remoteFileVersion then
     JValue.writeToFile(jLocalObj, filePath)
   end
 
@@ -25,8 +34,8 @@ function T.syncLargeJSONFile(jLocalObj, filePath)
   local jFileDate = JValue.readFromFile(lightweightFilePath)
   local jSelectedObj = jLocalObj
 
-  local localDate = jLocalObj.fileVersion
-  local fileDate = jFileDate.fileVersion
+  local localDate = fromMaybe(0, jLocalObj and jLocalObj.fileVersion or nil)
+  local fileDate = fromMaybe(0, jFileDate and jFileDate.fileVersion or nil)
 
   if localDate < fileDate then
     
