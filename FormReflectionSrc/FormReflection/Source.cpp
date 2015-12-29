@@ -10,6 +10,8 @@ Plugin obtains some JC functionality and registers a function (sortByName) which
 #include <ShlObj.h>
 #include <assert.h>
 #include <cstdint>
+#include <boost/filesystem.hpp>
+#include <boost/algorithm/string.hpp>
 
 #include "skse/PluginAPI.h"
 #include "skse/skse_version.h"
@@ -88,19 +90,95 @@ namespace {
         return forms;
     }
 
-    bool registerAllFunctions(VMClassRegistry *registry) {
+    namespace fs = boost::filesystem;
 
-        auto funcName = "queryFormsFrom";
-        auto className = PLUGIN_NAME;
+    static VMResultArray<BSFixedString> listFilesInDirectory(StaticFunctionTag*, BSFixedString dirPath, BSFixedString fileExtension) {
+        if (!dirPath.data || !*dirPath.data) {
+            return VMResultArray<BSFixedString>();
+        }
+
+        VMResultArray<BSFixedString> files;
+
+
+        try {
+            const std::string fileExt = fileExtension.data ? fileExtension.data : "";
+            fs::path p(dirPath.data);
+            for (fs::directory_iterator it(p), end = fs::directory_iterator(); it != end; ++it) {
+                if (fs::is_directory(it->path())) {
+                    continue;
+                }
+
+                auto fPath = it->path().filename().generic_string();
+                if (fileExt.empty() || boost::iends_with(fPath, fileExt)) {
+                    files.emplace_back(fPath.c_str());
+                }
+            }
+        }
+        catch (const fs::filesystem_error& exc) {
+            _MESSAGE("listFilesInDirectory error: %s", exc.what());
+        }
+
+        return files;
+    }
+
+    bool isEmptyString(const BSFixedString& str) {
+        return !str.data || '\0' == *str.data;
+    }
+
+    BSFixedString fileNameFromPath(StaticFunctionTag*, BSFixedString dirPath) {
+        if (isEmptyString(dirPath)) {
+            return BSFixedString();
+        }
+        fs::path p(dirPath.data);
+        return p.filename().generic_string().c_str();
+    }
+
+    BSFixedString replaceExtension(StaticFunctionTag*, BSFixedString filePath, BSFixedString withExtension) {
+        if (isEmptyString(filePath)) {
+            return BSFixedString();
+        }
+        fs::path p(filePath.data);
+        p.replace_extension(isEmptyString(withExtension) ? fs::path() : fs::path(withExtension.data));
+        return p.generic_string().c_str();
+    }
+
+    template<size_t ParamCnt>
+    struct native_function_selector;
+
+#define MAKE_ME_HAPPY(N)\
+    template<> struct native_function_selector<N> {\
+        template<class... Params> using function = ::NativeFunction ## N <::StaticFunctionTag, Params...>;\
+            };
+
+    MAKE_ME_HAPPY(0);
+    MAKE_ME_HAPPY(1);
+    MAKE_ME_HAPPY(2);
+    MAKE_ME_HAPPY(3);
+    MAKE_ME_HAPPY(4);
+    MAKE_ME_HAPPY(5);
+    MAKE_ME_HAPPY(6);
+
+#undef  MAKE_ME_HAPPY
+
+
+    template <class R, class... Params>
+    void registerFunction(const char* funcName, R(*funcPtr)(StaticFunctionTag*, Params ...), VMClassRegistry *registry) {
 
         registry->RegisterFunction(
-            new NativeFunction2 <StaticFunctionTag, VMResultArray<TESForm*>, BSFixedString, UInt32>
-            (funcName, className, queryFormsFrom, registry)
+            new typename native_function_selector<sizeof... (Params)>::function <R, Params ...>(
+                funcName, PLUGIN_NAME, funcPtr, registry
+            )
         );
 
-        //registry->SetFunctionFlags(className, funcName, VMClassRegistry::kFunctionFlag_NoWait);
+        registry->SetFunctionFlags(PLUGIN_NAME, funcName, VMClassRegistry::kFunctionFlag_NoWait);
+    }
 
-        _MESSAGE("registering functions");
+    bool registerAllFunctions(VMClassRegistry *registry) {
+
+        registerFunction("queryFormsFrom", queryFormsFrom, registry);
+        registerFunction("listFilesInDirectory", listFilesInDirectory, registry);
+        registerFunction("fileNameFromPath", fileNameFromPath, registry);
+        registerFunction("replaceExtension", replaceExtension, registry);
 
         return true;
     }
@@ -150,4 +228,29 @@ extern "C" {
 
         return true;
     }
+}
+
+//////////////////////////////////////////////////////////////////////////
+// boost 'fix'
+//////////////////////////////////////////////////////////////////////////
+
+static void init_boost() {
+    boost::filesystem::path p("dummy");
+}
+
+BOOL APIENTRY DllMain(HMODULE /* hModule */,
+    DWORD  ul_reason_for_call,
+    LPVOID /* lpReserved */)
+{
+    switch (ul_reason_for_call)
+    {
+    case DLL_PROCESS_ATTACH:
+        init_boost();
+        break;
+    case DLL_THREAD_ATTACH:
+    case DLL_THREAD_DETACH:
+    case DLL_PROCESS_DETACH:
+        break;
+    }
+    return TRUE;
 }
