@@ -289,20 +289,16 @@ endfunction
 
 
 int function JSONFile_sync(int jLocalObj, string filePath) global
-	int jTransport = object()
-	setObj(jTransport, "jLocalObj", jLocalObj)
-	setStr(jTransport, "filePath", filePath)
-	int jSelectedObj = JValue.evalLuaObj(jTransport, "return PosePicker.syncJSONFile(jobject.jLocalObj, jobject.filePath)", jLocalObj)
-	JValue.zeroLifetime(jTransport)
+	int jSelectedObj = JLua.evalLuaObj("return PosePicker.syncJSONFile(args.localObj, args.filePath)",\
+		JLua.setObj("localObj",jLocalObj, JLua.setStr("filePath",filePath))\
+	)
 	return jSelectedObj
 endfunction
 
 int function JSONFile_syncLargeFile(int jLocalObj, string filePath) global
-	int jTransport = object()
-	setObj(jTransport, "jLocalObj", jLocalObj)
-	setStr(jTransport, "filePath", filePath)
-	int jSelectedObj = JValue.evalLuaObj(jTransport, "return PosePicker.syncLargeJSONFile(jobject.jLocalObj, jobject.filePath)", jLocalObj)
-	JValue.zeroLifetime(jTransport)
+	int jSelectedObj = JLua.evalLuaObj("return PosePicker.syncLargeJSONFile(args.localObj, args.filePath)",\
+		JLua.setObj("localObj",jLocalObj, JLua.setStr("filePath",filePath))\
+	)
 	return jSelectedObj
 endfunction
 
