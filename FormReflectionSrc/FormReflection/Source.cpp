@@ -34,6 +34,11 @@ namespace {
     static PluginHandle					g_pluginHandle = kPluginHandle_Invalid;
     static SKSEPapyrusInterface			* g_papyrus = NULL;
 
+    bool isEmptyString(const BSFixedString& str) {
+        return !str.data || '\0' == *str.data;
+    }
+
+
 /*
     static VMResultArray<TESForm*> queryIDLEForms(StaticFunctionTag*, BSFixedString sourcePlugin) {
 
@@ -61,15 +66,29 @@ namespace {
 */
     static VMResultArray<TESForm*> queryFormsFrom(StaticFunctionTag*, BSFixedString sourcePlugin, UInt32 formType, UInt32 maxFailedLookups) {
 
+        if (isEmptyString(sourcePlugin)) {
+            _MESSAGE("queryFormsFrom: invalid `sourcePlugin` parameter passed");
+            return VMResultArray<TESForm*>();
+        }
+
         const auto dh = DataHandler::GetSingleton();
+        const auto modIdx = dh->GetModIndex(sourcePlugin.data);
+
+        if (modIdx == decltype(modIdx)(-1)) {
+            _MESSAGE("queryFormsFrom: sourcePlugin `%s` is not loaded?", sourcePlugin.data);
+            return VMResultArray<TESForm*>();
+        }
 
         VMResultArray<TESForm*> forms;
 
-        uint32_t formIdLow = 0;
-        const auto modIdx = dh->GetModIndex(sourcePlugin.data);
+        for (uint32_t formIdLow = 0, failedLookups = 0; true; ++formIdLow) {
 
-        for (uint32_t formIdLow = 0, failedLookups = 0; formIdLow <= 0x00ffffff && failedLookups < maxFailedLookups; ++formIdLow) {
-        
+            bool stopCycle = formIdLow > 0x00ffffff /*|| failedLookups > maxFailedLookups*/;
+            if (stopCycle) {
+                _MESSAGE("queryFormsFrom: formIdLow %u failedLookups %u", formIdLow, failedLookups);
+                break;
+            }
+
             TESForm* form = LookupFormByID((uint32_t)form_handling::construct(modIdx, formIdLow));
             if (!form) {
                 ++failedLookups;
@@ -85,7 +104,7 @@ namespace {
             }
         }
 
-        _MESSAGE("queryFormsFrom: %u forms of type %u found", forms.size(), formType);
+        _MESSAGE("queryFormsFrom: %u forms of type %u in `%s` found", forms.size(), formType, sourcePlugin.data);
 
         return forms;
     }
@@ -119,10 +138,6 @@ namespace {
         }
 
         return files;
-    }
-
-    bool isEmptyString(const BSFixedString& str) {
-        return !str.data || '\0' == *str.data;
     }
 
     BSFixedString fileNameFromPath(StaticFunctionTag*, BSFixedString dirPath) {
