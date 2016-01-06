@@ -33,15 +33,17 @@ int function PoseList_loadFromFile(string collectionName) global
 	int jPoses = JValue.readFromFile(__collectionNameToPath(collectionName))
 	PrintConsole("PoseList_loadFromFile: loading " + collectionName + " at " + __collectionNameToPath(collectionName) + ": " + jPoses)
 
+	if !jPoses
+		PrintConsole("PoseList_loadFromFile: can't load " + collectionName + " at " + __collectionNameToPath(collectionName))
+		return 0
+	endif
+
 	if !PoseList_isValid(jPoses)
 		PrintConsole("PoseList_loadFromFile: pose forms in the collection can't be loaded. Loading failed")
 		JValue.zeroLifetime(jPoses)
 		return 0
 	endif
 	
-	if !jPoses
-		PrintConsole("PoseList_loadFromFile: can't load " + collectionName + " at " + __collectionNameToPath(collectionName))
-	endif
 	PoseList_setExactName(jPoses, collectionName)
 	return jPoses
 endfunction
@@ -82,7 +84,7 @@ function PoseList_setPoses(int list, Form[] poses) global
 	JSONFile_onChanged(list)
 endfunction
 function PoseList_addPose(int list, Idle pose) global
-	if PoseList_findPose(list, pose) == -1
+	if pose && PoseList_findPose(list, pose) == -1
 		JArray.addForm(PoseList_getList(list), pose)
 		JSONFile_onChanged(list)
 	endif
@@ -240,7 +242,7 @@ function CTX_rememberActiveCollections(int jCTX) global
 	endif
 	int jEdit = CTX_getEditSlot(jCTX)
 	if jEdit && jEdit != jView
-		JIntMap.setObj(jObjectsToSync, jView, jView)
+		JIntMap.setObj(jObjectsToSync, jEdit, jEdit)
 	endif
 endfunction
 
@@ -390,6 +392,8 @@ function JSONFile_flush(int ijFile)
 	int synced = JSONFile_sync(getObj(ijFile,"root"), getStr(ijFile,"filePath"))
 	setObj(ijFile, "root", synced)
 endfunction
+
+;;;;
 
 
 int function JSONFile_sync(int jLocalObj, string filePath) global
