@@ -8,3 +8,4 @@ string[] function listFilesInDirectory(String directoryPath, String fileExtensio
 string function fileNameFromPath(String filePath) global native
 string function replaceExtension(String filePath, String withExtension) global native
 
+function logConsole(string text) global native

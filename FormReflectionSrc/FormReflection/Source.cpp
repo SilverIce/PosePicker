@@ -21,7 +21,7 @@ Plugin obtains some JC functionality and registers a function (sortByName) which
 #include "skse/GameData.h"
 
 #include "collections/form_handling.h"
-#include "util/stl_ext.h"
+//#include "util/stl_ext.h"
 
 class VMClassRegistry;
 
@@ -59,7 +59,7 @@ namespace {
         return forms;
     }
 */
-    static VMResultArray<TESForm*> queryFormsFrom(StaticFunctionTag*, BSFixedString sourcePlugin, UInt32 formType) {
+    static VMResultArray<TESForm*> queryFormsFrom(StaticFunctionTag*, BSFixedString sourcePlugin, UInt32 formType, UInt32 maxFailedLookups) {
 
         const auto dh = DataHandler::GetSingleton();
 
@@ -68,7 +68,7 @@ namespace {
         uint32_t formIdLow = 0;
         const auto modIdx = dh->GetModIndex(sourcePlugin.data);
 
-        for (uint32_t formIdLow = 0, failedLookups = 0; formIdLow <= 0x00ffffff || failedLookups > 500; ++formIdLow) {
+        for (uint32_t formIdLow = 0, failedLookups = 0; formIdLow <= 0x00ffffff && failedLookups < maxFailedLookups; ++formIdLow) {
         
             TESForm* form = LookupFormByID((uint32_t)form_handling::construct(modIdx, formIdLow));
             if (!form) {
@@ -142,6 +142,14 @@ namespace {
         return p.generic_string().c_str();
     }
 
+    void logConsole(StaticFunctionTag*, BSFixedString text) {
+        if (text.data) {
+            char textData[1024] = { '\0' };
+            strncpy_s(textData, text.data, sizeof(textData) - 1);
+            Console_Print(textData);
+        }
+    }
+
     template<size_t ParamCnt>
     struct native_function_selector;
 
@@ -179,6 +187,7 @@ namespace {
         registerFunction("listFilesInDirectory", listFilesInDirectory, registry);
         registerFunction("fileNameFromPath", fileNameFromPath, registry);
         registerFunction("replaceExtension", replaceExtension, registry);
+        registerFunction("logConsole", logConsole, registry);
 
         return true;
     }
