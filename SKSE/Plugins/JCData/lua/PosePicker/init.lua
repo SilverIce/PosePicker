@@ -9,14 +9,15 @@ end
 
 -----
 
-local function fromMaybe(defValue, maybe)
-  return maybe ~= nil and maybe or defValue
+local function getKeyOrDef(defValue, key, tbl)
+  local val = tbl and tbl[key] or nil
+  return val ~= nil and val or defValue
 end
 
 function T.syncJSONFile(jLocalObj, filePath)
   local remoteObj = JValue.readFromFile(filePath)
-  local remoteFileVersion = fromMaybe(0, remoteObj and remoteObj.fileVersion or nil)
-  local localFileVersion = fromMaybe(0, jLocalObj and jLocalObj.fileVersion or nil)
+  local remoteFileVersion = getKeyOrDef(0, 'fileVersion', remoteObj)
+  local localFileVersion = getKeyOrDef(0, 'fileVersion', jLocalObj)
 
   if not remoteObj then
     return nil  -- if no remote file, then the file was deleted, local data should be set to nil too
@@ -27,6 +28,19 @@ function T.syncJSONFile(jLocalObj, filePath)
   end
 
   return jLocalObj
+end
+
+-- Does not select between local & remote version. Modifies local object instead!
+function T.syncJSONFileInplace(jLocalObj, filePath)
+
+  local selectedObj = T.syncJSONFile(jLocalObj, filePath)
+
+  if jLocalObj and selectedObj and selectedObj ~= jLocalObj then
+    JValue.clear(jLocalObj)
+    for k,v in pairs(selectedObj) do
+      jLocalObj[k] = v
+    end
+  end
 end
 
 function T.syncLargeJSONFile(jLocalObj, filePath)

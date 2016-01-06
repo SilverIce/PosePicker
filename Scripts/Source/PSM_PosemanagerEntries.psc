@@ -1,7 +1,7 @@
 Scriptname PSM_PosemanagerEntries
 
 import JMap
-import MiscUtil
+import Debug
 
 function Pose_setName(Idle pose, string name) global
 	JFormDB.setStr(pose, ".PosePicker.name", name)
@@ -13,7 +13,7 @@ endfunction
 
 int function PoseList_make(string name) global
 	int list = object()
-	setStr(list, "name", name)
+	PoseList_setName(list, name)
 	setInt(list, "poseIdx", 0)
 	setObj(list, "poses", JArray.object())
 	return list
@@ -24,18 +24,29 @@ int function PoseList_loadFromPlugin(string pluginName) global
 		return 0
 	endif
 
-	int jPoses = PoseList_make(name = (pluginName + "-based list"))
+	int jPoses = PoseList_make("xx")
+	PoseList_setExactName(jPoses, pluginName + "-based list")
 	JArray_insertFormArray(PoseList_getList(jPoses), poses)
 	return jPoses
 endfunction
 int function PoseList_loadFromFile(string collectionName) global
 	int jPoses = JValue.readFromFile(__collectionNameToPath(collectionName))
 	PrintConsole("PoseList_loadFromFile: loading " + collectionName + " at " + __collectionNameToPath(collectionName) + ": " + jPoses)
+
+	if !PoseList_isValid(jPoses)
+		PrintConsole("PoseList_loadFromFile: pose forms in the collection can't be loaded. Loading failed")
+		JValue.zeroLifetime(jPoses)
+		return 0
+	endif
+	
 	if !jPoses
 		PrintConsole("PoseList_loadFromFile: can't load " + collectionName + " at " + __collectionNameToPath(collectionName))
 	endif
-	PoseList_setName(jPoses, collectionName)
+	PoseList_setExactName(jPoses, collectionName)
 	return jPoses
+endfunction
+bool function PoseList_isValid(int list) global
+	return PoseList_findPose(list, None) == -1
 endfunction
 string function PoseList_filePath(int list) global
 	return __collectionNameToPath(PoseList_getName(list))
@@ -43,15 +54,18 @@ endfunction
 string function PoseList_getName(int list) global
 	return getStr(list, "name")
 endfunction
-function PoseList_setName(int list, string name) global
+function PoseList_setExactName(int list, string name) global
 	setStr(list, "name", name)
 	JSONFile_onChanged(list)
+endfunction
+function PoseList_setName(int list, string name) global
+	PoseList_setExactName(list, JString_normalizeString(name))
 endfunction
 string function PoseList_describe(int list) global
 	if list
 		return PoseList_getName(list)+", "+PoseList_poseCount(list)+" poses"
 	else
-		return "'pose collection doesn't exist'"
+		return "<No collection>"
 	endif
 endfunction
 int function PoseList_getList(int list) global
@@ -88,15 +102,29 @@ int function PoseList_poseIndex(int list) global
 	return getInt(list, "poseIdx")
 endfunction
 int function PoseList_setPoseIndex(int list, int index) global
+	;TraceConditional("invalid identifier", list == 0)
 	int count = PoseList_poseCount(list)
-	int idx = (index + count) % count
-	setInt(list, "poseIdx", idx)
-	JSONFile_onChanged(list)
-	return idx
+	if count > 0
+		int idx = (index + count) % count
+		setInt(list, "poseIdx", idx)
+		JSONFile_onChanged(list)
+		return idx
+	else
+		return 0
+	endif
 endfunction
 Idle function PoseList_currentPose(int list) global
 	return JArray.getForm(PoseList_getList(list), PoseList_poseIndex(list)) as Idle
 endfunction
+
+;;;;;;;;;;;;;
+
+; function tryInstallMod() global
+; 	string userDir = JContainers.userDirectory()
+; 	if JContainers.fileExistsAtPath(userDir + ".installed")
+; 		return
+
+
 
 ;;;;;;;;;;;;; Key Handler
 
@@ -116,29 +144,56 @@ string function KHConf_getKeyHandler(int jConfig, int keyCode) global
 	return JValue.solveStr(jConfig, ".handlers[" + keyCode + "]")
 endfunction
 
-function KHConf_setKeyCodeForHandler(int jConfig, int keyCode, string handler) global
+string function KHConf_EVENT_NAME() global
+	return "PSM_KHConf_setKeyCodeForHandler"
+endfunction
+string function KHConf_FILE_PATH() global
+	return "Data/Scripts/Source/PSM_KeyHandlerConfig.json"
+endfunction
+
+bool function KHConf_setKeyCodeForHandler(int jConfig, int keyCode, string handler) global
+
 	int keys2handlers = getObj(jConfig, "handlers")
+	; to prevent overwrite 
+	if JIntMap.hasKey(keys2handlers, keyCode)
+		return False
+	endif
+
 	int handlers = JIntMap.allValues(keys2handlers)
 	int pairIdx = JArray.findStr(handlers, handler)
 
-	;JValue.evalLuaInt(jConfig, "return jc.find(jobject.handlers, function(v) v ==  end)")
-
 	if pairIdx != -1
-		int oldKeyCode = JIntMap.getNthKey(keys2handlers, pairIdx);
+		int oldKeyCode = JIntMap.getNthKey(keys2handlers, pairIdx)
 		JIntMap.removeKey(keys2handlers, oldKeyCode)
 		JIntMap.setStr(keys2handlers, keyCode, handler)
 
-		int evt = ModEvent.Create("PSM_KHConf_setKeyCodeForHandler")
+		int evt = ModEvent.Create(KHConf_EVENT_NAME())
 		ModEvent.PushInt(evt, jConfig)
 		ModEvent.PushInt(evt, oldKeyCode)
 		ModEvent.PushInt(evt, keyCode)
 		ModEvent.Send(evt)
 	endif
 	JValue.zeroLifetime(handlers)
+	return True
 endfunction
 
-int function KHConf_singleton(int jLocalObj) global
-	return JSONFile_sync(jLocalObj, "Data/Scripts/Source/PSM_KeyHandlerConfig.json")
+int function KHConf_singleton() global
+	string path = ".PosePicker.KHConf"
+	string fpath = KHConf_FILE_PATH()
+	int jLocalObj = JDB.solveObj(path)
+	int jRemote = JValue.readFromFile(fpath)
+
+	if JSONFile_modifyDate(jLocalObj) < JSONFile_modifyDate(jRemote)
+		JDB.solveObjSetter(path, jRemote, True)
+		;PrintConsole("KHConf_singleton: " + jRemote)
+		return jRemote
+	elseif JSONFile_modifyDate(jLocalObj) > JSONFile_modifyDate(jRemote)
+		JValue.writeToFile(jLocalObj, fpath)
+	endif
+
+	JValue.zeroLifetime(jRemote)
+	;PrintConsole("KHConf_singleton: " + jLocalObj)
+	return jLocalObj
 endfunction
 
 ;;;;;;;;;;;;;;;;;;; View & Edit context
@@ -167,16 +222,37 @@ endfunction
 
 ;;; IO
 
-function CTX_syncActiveCollections(int jCTX) global
+int function CTX_getObjectsToSync(int jCTX) global
+	int jObjectsToSync = getObj(jCTX, "objectsToSync")
+	if !jObjectsToSync
+		jObjectsToSync = JIntMap.object()
+		setObj(jCTX, "objectsToSync", jObjectsToSync)
+	endif
+	return jObjectsToSync
+endfunction
+
+function CTX_rememberActiveCollections(int jCTX) global
+	int jObjectsToSync = CTX_getObjectsToSync(jCTX)
+
 	int jView = CTX_getViewSlot(jCTX)
 	if jView
-		CTX_setViewSlot(jCTX, JSONFile_sync(jView, PoseList_filePath(jView)))
+		JIntMap.setObj(jObjectsToSync, jView, jView)
 	endif
-
 	int jEdit = CTX_getEditSlot(jCTX)
 	if jEdit && jEdit != jView
-		CTX_setEditSlot(jCTX, JSONFile_sync(jEdit, PoseList_filePath(jEdit)))
+		JIntMap.setObj(jObjectsToSync, jView, jView)
 	endif
+endfunction
+
+function CTX_syncCollections(int jCTX) global
+	int jObjectsToSync = CTX_getObjectsToSync(jCTX)
+	int k = JIntMap.getNthKey(jObjectsToSync, 0)
+	while k
+		int o = JIntMap.getObj(jObjectsToSync, k)
+		k = JIntMap.nextKey(jObjectsToSync, k)
+		JSONFile_syncInplace(o, PoseList_filePath(o))
+	endwhile
+	JIntMap.clear(jObjectsToSync)
 endfunction
 
 int function CTX_getCollectionWithName(int jCTX, string name) global
@@ -230,10 +306,29 @@ function CTX_deleteCollection(int jCTX, int jPoses) global
 	if CTX_getViewSlot(jCTX) == jPoses
 		CTX_setViewSlot(jCTX, 0)
 	endif
+	PrintConsole("deleting collection at " + PoseList_filePath(jPoses))
 	JContainers.removeFileAtPath(PoseList_filePath(jPoses))
 endfunction
 
+bool function CTX_renameCollection(int jCTX, int jPoses, string newName) global
+	string normalizedName = JString_normalizeString(newName)
+
+	if 0 == jPoses || newName == "" || True == CTX_isCollectionWithNameExists(jCTX, normalizedName)
+		return False
+	endif
+
+	;PrintConsole("deleting collection at " + PoseList_filePath(jPoses))
+	JContainers.removeFileAtPath(PoseList_filePath(jPoses))
+	PoseList_setName(jPoses, normalizedName)
+	JValue.writeToFile(jPoses, PoseList_filePath(jPoses))
+	return True
+endfunction
+
 ;;;; Utils ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+function PrintConsole(string text) global
+	FormReflection.logConsole("[PosePicker] " + text)
+endfunction
 
 string[] function getModList() global
 	string[] mods = Utility.CreateStringArray(Game.GetModCount(), fill = "")
@@ -253,6 +348,10 @@ string[] function JArray_toStringArray(int obj) global
 		i += 1
 	endwhile
 	return mods
+endfunction
+
+string function JString_normalizeString(string value) global
+	return JLua.evalLuaStr("return string.gsub(args.str, '%W', ' ')", JLua.setStr("str",value))
 endfunction
 
 ; int function JSONFileCache(string keyPath, string file, bool forceRefresh = false) global
@@ -275,17 +374,22 @@ endfunction
 
 ;;;;;;;;;;;;;;;;;;;;;; JSONFile
 
-; int function JSONFile_make(string filePath)
-; 	return JValue.objectFromPrototype("{ \"filePath\": \""+ filePath +"\" }")
-; endfunction
+int function JSONFile_make(string filePath)
+	return JValue.objectFromPrototype("{ \"filePath\": \""+ filePath +"\" }")
+endfunction
 
-; int function JSONFile_root(int ijFile, int sessionUID)
-; 	if getInt(ijFile, "tick") != sessionUID
-; 		setInt(ijFile, "tick", sessionUID)
-; 		setObj(ijFile, "root", JValue.readFromFile(getStr(ijFile, "filePath")))
-; 	endif
-; 	return getObj(ijFile, "root")
-; endfunction
+int function JSONFile_root(int ijFile, int sessionUID)
+	if getInt(ijFile, "tick") != sessionUID
+		setInt(ijFile, "tick", sessionUID)
+		setObj(ijFile, "root", JValue.readFromFile(getStr(ijFile, "filePath")))
+	endif
+	return getObj(ijFile, "root")
+endfunction
+
+function JSONFile_flush(int ijFile)
+	int synced = JSONFile_sync(getObj(ijFile,"root"), getStr(ijFile,"filePath"))
+	setObj(ijFile, "root", synced)
+endfunction
 
 
 int function JSONFile_sync(int jLocalObj, string filePath) global
@@ -293,6 +397,12 @@ int function JSONFile_sync(int jLocalObj, string filePath) global
 		JLua.setObj("localObj",jLocalObj, JLua.setStr("filePath",filePath))\
 	)
 	return jSelectedObj
+endfunction
+
+function JSONFile_syncInplace(int jLocalObj, string filePath) global
+	JLua.evalLuaInt("PosePicker.syncJSONFileInplace(args.localObj, args.filePath)",\
+		JLua.setObj("localObj",jLocalObj, JLua.setStr("filePath",filePath))\
+	)
 endfunction
 
 int function JSONFile_syncLargeFile(int jLocalObj, string filePath) global

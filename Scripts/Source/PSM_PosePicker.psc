@@ -2,39 +2,42 @@ Scriptname PSM_PosePicker extends Quest
 
 import Debug
 import PSM_PosemanagerEntries
-import MiscUtil
 
-; Bool Property isActive
-; 	Bool function get()
-; 		return getState() != "Sleep"
-; 	endfunction
-; 	function set(Bool o)
-; 		if o
-; 			GoToState("")
-; 		else
-; 			GoToState("Sleep")
-; 		endif
-; 	endfunction
-; endproperty
+Bool Property isActive
+	Bool function get()
+		return _isActive
+	endfunction
+	function set(Bool o)
+		_isActive = o
+		if o
+			self.jKeyConf = KHConf_singleton()
+			self.jContext = CTX_object()
+			self.syncData()
+			self.GoToState("")
+		else
+			self.syncData()
+			self.jKeyConf = 0
+			self.jContext = 0
+			self.UnregisterForUpdate()
+			self.GoToState("Sleep")
+		endif
+	endfunction
+endproperty
+Bool _isActive = False
 
-; Auto State Sleep
-; 	Event OnBeginState()
-; 		self.jKeyConf = 0
-; 		self.jContext = 0
-; 	EndEvent
-; EndState
+Auto State Sleep
+	function OnPlayerLoadGame()
+	endfunction
+	Event OnUpdate()
+	EndEvent
+EndState
 
-; Event OnBeginState()
-; 	self.jKeyConf = KHConf_singleton()
-; 	self.jContext = CTX_singleton()
-; EndEvent
-
-Event OnInit()
-	; PrintConsole("iniiiiiiiiiiiiiiiiit")
-	self.jContext = CTX_object()
-
-	self.syncData()
-EndEvent
+function OnPlayerLoadGame()
+	if !(JContainers.APIVersion() == 3 && JContainers.featureVersion() >= 3)
+		Debug.MessageBox("PosePicker won't approve any JC version below 3.3")
+	endif
+	self.trySyncDataAfterDelay(0.5)
+endfunction
 
 ;;;;;;;;;;;;;;;;; AutoSyncing
 
@@ -44,9 +47,10 @@ Event OnUpdate()
 EndEvent
 
 function syncData()
-	self.jKeyConf = KHConf_singleton(self.jKeyConf)
-	CTX_syncActiveCollections(self.jContext)
-	PrintConsole("Syncing data")
+	;Debug.TraceStack("syncData stack")
+	self.jKeyConf = KHConf_singleton()
+	CTX_syncCollections(self.jContext)
+	PrintConsole("Synced data")
 endfunction
 
 bool _isSyncDelayed = False
@@ -54,6 +58,7 @@ bool _isSyncDelayed = False
 function trySyncDataAfterDelay(float delay = 5.0)
 	if _isSyncDelayed == False
 		_isSyncDelayed = True
+		CTX_rememberActiveCollections(self.jContext)
 		self.RegisterForSingleUpdate(delay)
 	endif
 endfunction
@@ -68,13 +73,14 @@ Int Property jKeyConf
 		if o == _jKeyConf
 			return
 		endif
-		_jKeyConf = JValue.releaseAndRetain(_jKeyConf, o)
+
+		_jKeyConf = JValue.releaseAndRetain(_jKeyConf, o, "PSM_PosePicker")
 
 		if o != 0
 			self.listenKeys()
-			self.RegisterForModEvent("KHConf_setKeyCodeForHandler", "OnKeyConfigKeyChange")
+			self.RegisterForModEvent(KHConf_EVENT_NAME(), "OnKeyConfigKeyChange")
 		else
-			self.UnregisterForModEvent("KHConf_setKeyCodeForHandler")
+			self.UnregisterForModEvent(KHConf_EVENT_NAME())
 			self.UnregisterForAllKeys()
 		endif
 	endfunction
@@ -82,6 +88,7 @@ endproperty
 int _jKeyConf = 0
 
 Event OnKeyConfigKeyChange(int jConfig, int oldKeyCode, int keyCode)
+	PrintConsole("OnKeyConfigKeyChange: oldKeyCode "+oldKeyCode+" keyCode "+keyCode)
 	self.UnregisterForKey(oldKeyCode)
 	self.RegisterForKey(keyCode)
 EndEvent
@@ -92,7 +99,7 @@ Event OnKeyDown(int keyCode)
 	endif
 
 	string handlerState = KHConf_getKeyHandler(jKeyConf, keyCode)
-	PrintConsole("OnKeyDown: "+keyCode+":"+handlerState)
+	;PrintConsole("OnKeyDown: "+keyCode+":"+handlerState)
 	if handlerState
 		string prevState = self.GetState()
 		self.GoToState(handlerState)
@@ -201,15 +208,17 @@ State KEY_ACTIVATE_POSE_COLLECTION
 	endfunction
 EndState
 ; Load poses from ESP
+int KEY_LOAD_FROM_ESP_handleKey_lastIndex = -1
 State KEY_LOAD_FROM_ESP 
 	function handleKey(int keyCode)
 
 		String[] modList = PSM_PosemanagerEntries.getModList()
-		int selectedIdx = self.uilib.ShowList("Pick a plugin", asOptions = modList, aiStartIndex = -1, aiDefaultIndex = -1)
+		int selectedIdx = self.uilib.ShowList("Pick a plugin", asOptions = modList, aiStartIndex = KEY_LOAD_FROM_ESP_handleKey_lastIndex, aiDefaultIndex = -1)
 		if selectedIdx == -1
 			return
 		endif
 
+		KEY_LOAD_FROM_ESP_handleKey_lastIndex = selectedIdx
 		string modName = modList[selectedIdx]
 		; int jPoses = self.pickPoseList(suggestedListName = (modName + " <- Rename Me"))
 		; if !jPoses
@@ -239,6 +248,15 @@ UILIB_1 Property uilib
 	endfunction
 endproperty
 
+Actor function pickPoseTargetActor() global
+	Actor consoleRef = Game.GetCurrentConsoleRef() as Actor
+	if consoleRef != None
+		return consoleRef
+	else
+		return Game.GetPlayer()
+	endif
+endfunction
+
 Int Property currentPoseIdx
 	int function get()
 		return PoseList_poseIndex(self.jSourcePoseArray)
@@ -250,7 +268,7 @@ Int Property currentPoseIdx
 		PrintConsole(text)
 
 		Idle pose = PoseList_currentPose(self.jSourcePoseArray)
-		Actor player = Game.GetPlayer()
+		Actor player = pickPoseTargetActor()
 		if pose && player && !player.IsOnMount()
 			player.PlayIdle(pose)
 		endif
@@ -296,7 +314,7 @@ Int Property jContext
 		return _jContext
 	endfunction
 	function set(int o)
-		_jContext = JValue.releaseAndRetain(_jContext, o)
+		_jContext = JValue.releaseAndRetain(_jContext, o, "PSM_PosePicker")
 	endfunction
 endproperty
 int _jContext = 0
@@ -345,6 +363,11 @@ State KEY_SYNC_DATA
 		Notification("syncing done")
 	endfunction
 EndState
+State KEY_DUMP
+	function handleKey(int keyCode)
+		JValue.writeToFile(self.jContext, __collectionsPath() + "__dump.json")
+	endfunction
+EndState
 State KEY_PERFORM_ACTION
 	function handleKey(int keyCode)
 
@@ -370,6 +393,11 @@ State KEY_PERFORM_ACTION
 			CTX_deleteCollection(self.jContext, self.jActivePoses)
 		elseif act == "Nothing"
 			;
+		elseif act == "Rename"
+			string newName = self.uilib.ShowTextInput(asTitle = "Rename collection",  asInitialText = "")
+			if !CTX_renameCollection(self.jContext, self.jActivePoses, newName)
+				Notification("Can't rename the collection")
+			endif
 		else
 			Notification("Action "+act+" is not implemented yet")
 		endif
