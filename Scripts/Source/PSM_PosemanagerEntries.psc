@@ -21,6 +21,7 @@ endfunction
 int function PoseList_loadFromPlugin(string pluginName) global
 	Form[] poses = FormReflection.queryFormsFrom(pluginName, withFormType = 78)
 	if poses.Length == 0
+		PrintConsole("PoseList_loadFromPlugin: no poses in " + pluginName)
 		return 0
 	endif
 

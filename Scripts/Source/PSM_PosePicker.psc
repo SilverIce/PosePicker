@@ -248,12 +248,18 @@ UILIB_1 Property uilib
 	endfunction
 endproperty
 
-Actor function pickPoseTargetActor() global
+Actor _lastSelectedActor
+
+Actor function pickPoseTargetActor()
 	Actor consoleRef = Game.GetCurrentConsoleRef() as Actor
 	if consoleRef != None
+		_lastSelectedActor = consoleRef
 		return consoleRef
+	elseif _lastSelectedActor != None
+		return _lastSelectedActor
 	else
-		return Game.GetPlayer()
+		_lastSelectedActor = Game.GetPlayer()
+		return _lastSelectedActor
 	endif
 endfunction
 
@@ -337,21 +343,28 @@ endfunction
 
 int function pickPoseList(string headerText, string suggestedListName, int jCurrentSelectedCollection = 0)
 
-	string[] poseListsNames = CTX_getCollectionNames(self.jContext)
+	int jPoseListnames = JValue.retain(JArray.objectWithStrings(CTX_getCollectionNames(self.jContext)), tag = "PSM_PosePicker")
+	JArray.addStr(jPoseListnames, "Create new collection", 0)
 
-	int iCurrPoseIdx = poseListsNames.Find(PoseList_getName(jCurrentSelectedCollection))
+	int selectedIdx = uilib.ShowList(headerText\
+		, asOptions = JArray_toStringArray(jPoseListnames)\
+		, aiStartIndex = JArray.findStr(jPoseListnames, PoseList_getName(jCurrentSelectedCollection), 0)\
+		, aiDefaultIndex = -1)
 
-	int selectedIdx = uilib.ShowList(headerText, asOptions = poseListsNames, aiStartIndex = iCurrPoseIdx, aiDefaultIndex = -1)
 	if selectedIdx == -1
+		JValue.release(jPoseListnames)
 		return 0
 	endif
 
-	int jPoses = CTX_getCollectionWithName(self.jContext, poseListsNames[selectedIdx])
+	int jPoses = 0
 
-	; if jPoses == CTX_dummyCollection(self.jContext)
-	; 	jPoses = self.createPoseCollection(title = "Create new pose collection", suggestedCollectionName = "New Collection")
-	; endif
+	if selectedIdx == 0
+		jPoses = self.createPoseCollection(title = "Create new pose collection", suggestedCollectionName = "New Collection")
+	else
+		jPoses = CTX_getCollectionWithName(self.jContext, JArray.getStr(jPoseListnames, selectedIdx))
+	endif
 
+	JValue.release(jPoseListnames)
 	PrintConsole("pickPoseList: " + PoseList_describe(jPoses) + " picked")
 
 	return jPoses
