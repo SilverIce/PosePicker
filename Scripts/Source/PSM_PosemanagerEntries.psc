@@ -10,6 +10,17 @@ string function Pose_getName(Idle pose) global
 	return JFormDB.getStr(pose, ".PosePicker.name")
 endfunction
 
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
+int function PoseListLightWeight_make(int jPoses) global
+	int list = object()
+	setStr(list, "name", PoseList_getName(jPoses))
+	setInt(list, "poseIdx", PoseList_poseIndex(jPoses))
+	return list
+endfunction
+
+;;;;;;;;;;;;;;;;;;;;;;;;;
+
 
 int function PoseList_make(string name) global
 	int list = object()
@@ -124,7 +135,23 @@ endfunction
 ;;;;;;;;;;;;;;;;;;; View & Edit context
 
 int function CTX_singleton(int jLocalObj) global
-	return JSONFile_syncLargeFile(jLocalObj, "Data/Scripts/Source/PSM_PosePickerStruct.json")
+	;; We need to split large file onto small ones
+	; For ex, this is a REALLY large structure
+	; let's use weak references (Ints or paths) to point to our large objects?
+	; COntext is just a set of lightweight collections
+	; Lightweight collections PRODUCE real ones!
+
+	; hard-to-achieve parts are:
+	; - need to sync with filesystem, delete 'dead' lightweight objects and create new ones
+	;   just get list of files, 
+
+	; hugePart is JMap containing some HUGE objects, like cached pose collections (HUGE ones) - maybe {filename, obj} pairs
+	; detach hugePart temporarily to reduce the 'weigth' of jLocalObj
+	int hugePart = getObj(jLocalObj, "hugePart")
+	setObj(jLocalObj, "hugePart", 0)
+
+	int jSelectedObj = JSONFile_syncLargeFile(jLocalObj, "Data/Scripts/Source/PSM_PosePickerStruct.json")
+
 endfunction
 
 function CTX_setViewSlot(int jCTX, int jPoses) global
