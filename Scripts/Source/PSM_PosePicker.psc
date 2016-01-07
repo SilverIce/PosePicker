@@ -33,8 +33,8 @@ Auto State Sleep
 EndState
 
 function OnPlayerLoadGame()
-	if !(JContainers.APIVersion() == 3 && JContainers.featureVersion() >= 3)
-		Debug.MessageBox("PosePicker won't approve any JC version below 3.3")
+	if !(JContainers.APIVersion() == 3 && JContainers.featureVersion() >= 2)
+		Debug.MessageBox("PosePicker won't approve any JContainers version below 3.2")
 	endif
 	self.trySyncDataAfterDelay(0.5)
 endfunction
@@ -429,7 +429,27 @@ State KEY_UNFAVORITE_POSE
 		PoseList_removePose(self.jActivePosesOrPickOne, pose)
 	endfunction
 EndState
-
+State KEY_VISIT_NEARBY
+	function handleKey(int keyCode)
+		Idle pose = PoseList_currentPose(self.jSourcePoseArray)
+		if pose
+			Int modId = Math.RightShift(pose.GetFormID(), 32 - 8)
+			;PrintConsole("KEY_VISIT_NEARBY modId " + modId)
+			String modName = Game.GetModName(modId)
+			;PrintConsole("KEY_VISIT_NEARBY modName " + modName)
+			Int jnewPoses = PoseList_loadFromPlugin(pluginName = modName)
+			if jnewPoses
+				PoseList_setName(jnewPoses, "VISIT_NEARBY")
+				PoseList_setPoseIndex(jnewPoses, PoseList_findPose(jnewPoses, pose))
+				;PrintConsole("KEY_VISIT_NEARBY jnewPoses " + jnewPoses)
+				self.jActivePoses = self.jSourcePoseArray
+				self.jSourcePoseArray = jnewPoses
+			else
+				Notification("No poses in " + modName)
+			endif
+		endif
+	endfunction
+EndState
 ; I had an idea of pose manager with pursuies me for so long.
 ; Yesterday I have found a way to pick all idles (poses) from ESPs.
 ; Basically this is just a draft for some blog and the mod itself is in the similar 'draft stage'.

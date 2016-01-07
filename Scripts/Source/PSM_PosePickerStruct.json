@@ -1,9 +1,0 @@
-{
-  "dummyCreateCollection": {
-    "name": "Create Pose Collection"
-  },
-  "fileVersion": 1451067776.0,
-  "poseCollections": [
-    "__reference|.dummyCreateCollection"
-  ]
-}

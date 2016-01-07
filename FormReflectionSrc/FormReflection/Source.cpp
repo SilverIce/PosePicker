@@ -1,10 +1,3 @@
-/*
-Primitive example which shows how to use SKSE messaging API and interact with JContainers API
-
-Plugin obtains some JC functionality and registers a function (sortByName) which sorts an jarray of forms by their names
-*/
-
-
 #include "common/IPrefix.h"
 
 #include <ShlObj.h>
@@ -25,7 +18,7 @@ Plugin obtains some JC functionality and registers a function (sortByName) which
 
 class VMClassRegistry;
 
-#define PLUGIN_NAME "FormReflection"
+#define PLUGIN_NAME "PSM_FormReflection"
 
 namespace form_handling = collections::form_handling;
 
@@ -85,7 +78,7 @@ namespace {
 
             bool stopCycle = formIdLow > 0x00ffffff /*|| failedLookups > maxFailedLookups*/;
             if (stopCycle) {
-                _MESSAGE("queryFormsFrom: formIdLow %u failedLookups %u", formIdLow, failedLookups);
+                //_MESSAGE("queryFormsFrom: formIdLow %u failedLookups %u", formIdLow, failedLookups);
                 break;
             }
 

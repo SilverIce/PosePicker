@@ -50,8 +50,8 @@ event OnPageReset(string page)
     	self.AddKeyMapOptionST("SKI_SetControlKey", "Control Key", KHConf_getAltKeyCode(jConfig))
 		self.AddEmptyOption()
 
-    	self.AddEmptyOption()
-    	self.AddEmptyOption()
+    	;self.AddEmptyOption()
+    	;self.AddEmptyOption()
 
     	jKeyOption2Handler = JValue.addToPool(JIntMap.object(), "PSM_PosePickerConfigMenu")
 

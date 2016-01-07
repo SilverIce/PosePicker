@@ -19,7 +19,7 @@ int function PoseList_make(string name) global
 	return list
 endfunction
 int function PoseList_loadFromPlugin(string pluginName) global
-	Form[] poses = FormReflection.queryFormsFrom(pluginName, withFormType = 78)
+	Form[] poses = PSM_FormReflection.queryFormsFrom(pluginName, withFormType = 78, maxFailedLookups = 7000)
 	if poses.Length == 0
 		PrintConsole("PoseList_loadFromPlugin: no poses in " + pluginName)
 		return 0
@@ -137,6 +137,7 @@ endfunction
 
 function KHConf_setAltKeyCode(int jConfig, int keyCode) global
 	setInt(jConfig, "altKey", keyCode)
+	JSONFile_onChanged(jConfig)
 endfunction
 
 int function KHConf_getKeyHandlers(int jConfig) global
@@ -151,7 +152,7 @@ string function KHConf_EVENT_NAME() global
 	return "PSM_KHConf_setKeyCodeForHandler"
 endfunction
 string function KHConf_FILE_PATH() global
-	return "Data/Scripts/Source/PSM_KeyHandlerConfig.json"
+	return "Data/PosePicker/KeyHandlerConfig.json"
 endfunction
 
 bool function KHConf_setKeyCodeForHandler(int jConfig, int keyCode, string handler) global
@@ -169,6 +170,7 @@ bool function KHConf_setKeyCodeForHandler(int jConfig, int keyCode, string handl
 		int oldKeyCode = JIntMap.getNthKey(keys2handlers, pairIdx)
 		JIntMap.removeKey(keys2handlers, oldKeyCode)
 		JIntMap.setStr(keys2handlers, keyCode, handler)
+		JSONFile_onChanged(jConfig)
 
 		int evt = ModEvent.Create(KHConf_EVENT_NAME())
 		ModEvent.PushInt(evt, jConfig)
@@ -186,7 +188,9 @@ int function KHConf_singleton() global
 	int jLocalObj = JDB.solveObj(path)
 	int jRemote = JValue.readFromFile(fpath)
 
-	if JSONFile_modifyDate(jLocalObj) < JSONFile_modifyDate(jRemote)
+	if JSONFile_modifyDate(jLocalObj) < JSONFile_modifyDate(jRemote)\
+	 || JSONFile_formatVersion(jLocalObj) < JSONFile_formatVersion(jRemote)\
+	 || jLocalObj == 0
 		JDB.solveObjSetter(path, jRemote, True)
 		;PrintConsole("KHConf_singleton: " + jRemote)
 		return jRemote
@@ -202,7 +206,7 @@ endfunction
 ;;;;;;;;;;;;;;;;;;; View & Edit context
 
 int function CTX_object() global
-	return JValue.readFromFile("Data/Scripts/Source/PSM_PosePickerStruct.json")
+	return JValue.readFromFile("Data/PosePicker/PoserContext.json")
 endfunction
 
 function CTX_setViewSlot(int jCTX, int jPoses) global
@@ -219,9 +223,9 @@ int function CTX_getEditSlot(int jCTX) global
 	return getObj(jCTX, "editSlot")
 endfunction
 
-int function CTX_dummyCollection(int jCTX) global
-	return getObj(jCTX, "dummyCreateCollection")
-endfunction
+; int function CTX_dummyCollection(int jCTX) global
+; 	return getObj(jCTX, "dummyCreateCollection")
+; endfunction
 
 ;;; IO
 
@@ -285,10 +289,10 @@ endfunction
 
 string[] function CTX_getCollectionNames(int jCTX) global
 	; I'd return just a list of files in some directory
-	string[] poseNames = FormReflection.listFilesInDirectory(__collectionsPath(), __poseFileExt())
+	string[] poseNames = PSM_FormReflection.listFilesInDirectory(__collectionsPath(), __poseFileExt())
 	Int i = 0
 	while i < poseNames.Length
-		poseNames[i] = FormReflection.replaceExtension(FormReflection.fileNameFromPath(poseNames[i]), "")
+		poseNames[i] = PSM_FormReflection.replaceExtension(PSM_FormReflection.fileNameFromPath(poseNames[i]), "")
 		i += 1
 	endwhile
 	return poseNames
@@ -330,7 +334,7 @@ endfunction
 ;;;; Utils ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 function PrintConsole(string text) global
-	FormReflection.logConsole("[PosePicker] " + text)
+	PSM_FormReflection.logConsole("[PosePicker] " + text)
 endfunction
 
 string[] function getModList() global
@@ -354,7 +358,11 @@ string[] function JArray_toStringArray(int obj) global
 endfunction
 
 string function JString_normalizeString(string value) global
-	return JLua.evalLuaStr("return string.gsub(args.str, '%W', ' ')", JLua.setStr("str",value))
+	int jargs = object()
+	setStr(jargs, "str", value)
+	string normalized = JValue.evalLuaStr(jargs, "return string.gsub(jobject.str, '%W', ' ')", value)
+	JValue.zeroLifetime(jargs)
+	return normalized
 endfunction
 
 ; int function JSONFileCache(string keyPath, string file, bool forceRefresh = false) global
@@ -377,45 +385,60 @@ endfunction
 
 ;;;;;;;;;;;;;;;;;;;;;; JSONFile
 
-int function JSONFile_make(string filePath)
-	return JValue.objectFromPrototype("{ \"filePath\": \""+ filePath +"\" }")
-endfunction
+; int function JSONFile_make(string filePath)
+; 	return JValue.objectFromPrototype("{ \"filePath\": \""+ filePath +"\" }")
+; endfunction
 
-int function JSONFile_root(int ijFile, int sessionUID)
-	if getInt(ijFile, "tick") != sessionUID
-		setInt(ijFile, "tick", sessionUID)
-		setObj(ijFile, "root", JValue.readFromFile(getStr(ijFile, "filePath")))
-	endif
-	return getObj(ijFile, "root")
-endfunction
+; int function JSONFile_root(int ijFile, int sessionUID)
+; 	if getInt(ijFile, "tick") != sessionUID
+; 		setInt(ijFile, "tick", sessionUID)
+; 		setObj(ijFile, "root", JValue.readFromFile(getStr(ijFile, "filePath")))
+; 	endif
+; 	return getObj(ijFile, "root")
+; endfunction
 
-function JSONFile_flush(int ijFile)
-	int synced = JSONFile_sync(getObj(ijFile,"root"), getStr(ijFile,"filePath"))
-	setObj(ijFile, "root", synced)
-endfunction
+; function JSONFile_flush(int ijFile)
+; 	int synced = JSONFile_sync(getObj(ijFile,"root"), getStr(ijFile,"filePath"))
+; 	setObj(ijFile, "root", synced)
+; endfunction
 
 ;;;;
 
+int function __packSyncArgs(int jLocalObj, string filePath) global
+	int jargs = object()
+	setObj(jargs,"localObj",jLocalObj)
+	setStr(jargs,"filePath",filePath)
+	return jargs
+endfunction
 
 int function JSONFile_sync(int jLocalObj, string filePath) global
-	int jSelectedObj = JLua.evalLuaObj("return PosePicker.syncJSONFile(args.localObj, args.filePath)",\
-		JLua.setObj("localObj",jLocalObj, JLua.setStr("filePath",filePath))\
-	)
+	int jargs = __packSyncArgs(jLocalObj, filePath)
+	int jSelectedObj = JValue.evalLuaObj(jargs, "return PosePicker.syncJSONFile(jobject.localObj, jobject.filePath)")
+	JValue.zeroLifetime(jargs)
+	; int jSelectedObj = JLua.evalLuaObj("return PosePicker.syncJSONFile(args.localObj, args.filePath)",\
+	; 	JLua.setObj("localObj",jLocalObj, JLua.setStr("filePath",filePath))\
+	; )
 	return jSelectedObj
 endfunction
 
 function JSONFile_syncInplace(int jLocalObj, string filePath) global
-	JLua.evalLuaInt("PosePicker.syncJSONFileInplace(args.localObj, args.filePath)",\
-		JLua.setObj("localObj",jLocalObj, JLua.setStr("filePath",filePath))\
-	)
+	int jargs = __packSyncArgs(jLocalObj, filePath)
+	JValue.evalLuaInt(jargs, "return PosePicker.syncJSONFileInplace(jobject.localObj, jobject.filePath)")
+	JValue.zeroLifetime(jargs)
+	; JLua.evalLuaInt("PosePicker.syncJSONFileInplace(args.localObj, args.filePath)",\
+	; 	JLua.setObj("localObj",jLocalObj, JLua.setStr("filePath",filePath))\
+	; )
 endfunction
 
-int function JSONFile_syncLargeFile(int jLocalObj, string filePath) global
-	int jSelectedObj = JLua.evalLuaObj("return PosePicker.syncLargeJSONFile(args.localObj, args.filePath)",\
-		JLua.setObj("localObj",jLocalObj, JLua.setStr("filePath",filePath))\
-	)
-	return jSelectedObj
-endfunction
+; int function JSONFile_syncLargeFile(int jLocalObj, string filePath) global
+; 	int jargs = __packSyncArgs(jLocalObj, filePath)
+; 	int jSelectedObj = JValue.evalLuaObj(jargs, "return PosePicker.syncLargeJSONFile(jobject.localObj, jobject.filePath)")
+; 	JValue.zeroLifetime(jargs)
+; 	; int jSelectedObj = JLua.evalLuaObj("return PosePicker.syncLargeJSONFile(args.localObj, args.filePath)",\
+; 	; 	JLua.setObj("localObj",jLocalObj, JLua.setStr("filePath",filePath))\
+; 	; )
+; 	return jSelectedObj
+; endfunction
 
 function JSONFile_onChanged(int jLocalObj) global
 	setFlt(jLocalObj, "fileVersion", JValue.evalLuaFlt(0, "return os.time()"))
@@ -423,4 +446,8 @@ endfunction
 
 float function JSONFile_modifyDate(int jLocalObj) global
 	return getFlt(jLocalObj, "fileVersion")
+endfunction
+
+float function JSONFile_formatVersion(int jLocalObj) global
+	return getFlt(jLocalObj, "formatVersion")
 endfunction
