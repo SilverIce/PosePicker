@@ -188,13 +188,8 @@ int function KHConf_singleton() global
 	int jLocalObj = JDB.solveObj(path)
 	int jRemote = JValue.readFromFile(fpath)
 
-	bool chooseLocal = jLocalObj != 0 \
-		&& JSONFile_formatVersion(jLocalObj) == JSONFile_formatVersion(jRemote) \
-		&& JSONFile_modifyDate(jLocalObj) > JSONFile_modifyDate(jRemote)
-
-	if !chooseLocal
+	if JSONFile_formatVersion(jLocalObj) != JSONFile_formatVersion(jRemote)
 		JDB.solveObjSetter(path, jRemote, True)
-		;PrintConsole("KHConf_singleton: " + jRemote)
 		return jRemote
 	elseif JSONFile_modifyDate(jLocalObj) > JSONFile_modifyDate(jRemote)
 		JValue.writeToFile(jLocalObj, fpath)
