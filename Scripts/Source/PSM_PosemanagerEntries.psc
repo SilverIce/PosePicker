@@ -188,9 +188,11 @@ int function KHConf_singleton() global
 	int jLocalObj = JDB.solveObj(path)
 	int jRemote = JValue.readFromFile(fpath)
 
-	if JSONFile_modifyDate(jLocalObj) < JSONFile_modifyDate(jRemote)\
-	 || JSONFile_formatVersion(jLocalObj) < JSONFile_formatVersion(jRemote)\
-	 || jLocalObj == 0
+	bool chooseLocal = jLocalObj != 0 \
+		&& JSONFile_formatVersion(jLocalObj) == JSONFile_formatVersion(jRemote) \
+		&& JSONFile_modifyDate(jLocalObj) > JSONFile_modifyDate(jRemote)
+
+	if !chooseLocal
 		JDB.solveObjSetter(path, jRemote, True)
 		;PrintConsole("KHConf_singleton: " + jRemote)
 		return jRemote
@@ -230,12 +232,7 @@ endfunction
 ;;; IO
 
 int function CTX_getObjectsToSync(int jCTX) global
-	int jObjectsToSync = getObj(jCTX, "objectsToSync")
-	if !jObjectsToSync
-		jObjectsToSync = JIntMap.object()
-		setObj(jCTX, "objectsToSync", jObjectsToSync)
-	endif
-	return jObjectsToSync
+	return getObj(jCTX, "objectsToSync")
 endfunction
 
 function CTX_rememberActiveCollections(int jCTX) global

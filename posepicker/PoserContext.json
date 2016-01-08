@@ -1,5 +1,9 @@
 {
 	"viewSlot" : 0,
 	"editSlot": 0,
-	"objectsToSync": []
+	"objectsToSync": {
+		"__metaInfo": {
+      		"typeName": "JIntMap"
+    	}
+	}
 }
