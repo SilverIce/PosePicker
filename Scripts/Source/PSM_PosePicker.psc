@@ -346,6 +346,13 @@ int function pickPoseList(string headerText, string suggestedListName, int jCurr
 	int jPoseListnames = JValue.retain(JArray.objectWithStrings(CTX_getCollectionNames(self.jContext)), tag = "PSM_PosePicker")
 	JArray.addStr(jPoseListnames, "Create new collection", 0)
 
+	;; Reorder names, so jCurrentSelectedCollection always at 1-st index
+	int iCurrnameCollIdx = JArray.findStr(jPoseListnames, PoseList_getName(jCurrentSelectedCollection), 0)
+	if iCurrnameCollIdx != -1
+		JArray.swapItems(jPoseListnames, 1, iCurrnameCollIdx)
+	endif
+	;;
+
 	int selectedIdx = uilib.ShowList(headerText\
 		, asOptions = JArray_toStringArray(jPoseListnames)\
 		, aiStartIndex = JArray.findStr(jPoseListnames, PoseList_getName(jCurrentSelectedCollection), 0)\
