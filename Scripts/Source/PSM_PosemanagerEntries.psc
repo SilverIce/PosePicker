@@ -16,6 +16,8 @@ int function PoseList_make(string name) global
 	PoseList_setName(list, name)
 	setInt(list, "poseIdx", 0)
 	setObj(list, "poses", JArray.object())
+	; this way it will have higher mod. time than any already existing collection
+	JSONFile_onChanged(list)
 	return list
 endfunction
 int function PoseList_loadFromPlugin(string pluginName) global
