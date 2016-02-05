@@ -224,6 +224,12 @@ int function CTX_getEditSlot(int jCTX) global
 	return getObj(jCTX, "editSlot")
 endfunction
 
+function CTX_swapSlots(int jCTX) global
+	int o = CTX_getViewSlot(jCTX)
+	CTX_setViewSlot(jCTX, CTX_getEditSlot(jCTX))
+	CTX_setEditSlot(jCTX, o)
+endfunction
+
 ; int function CTX_dummyCollection(int jCTX) global
 ; 	return getObj(jCTX, "dummyCreateCollection")
 ; endfunction

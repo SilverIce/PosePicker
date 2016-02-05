@@ -1,11 +1,12 @@
 {
   "altKey": 56,
   "fileVersion": 1452115968.0,
-  "formatVersion": 4,
+  "formatVersion": 6,
   "handlers": {
     "__metaInfo": {
       "typeName": "JIntMap"
     },
+    "42": "key_swap_view_edit",
     "22": "KEY_UNFAVORITE_POSE",
     "24": "KEY_VIEW_POSE_COLLECTION",
     "47": "KEY_VISIT_NEARBY",

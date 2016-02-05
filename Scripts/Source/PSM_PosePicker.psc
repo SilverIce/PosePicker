@@ -459,6 +459,11 @@ State KEY_VISIT_NEARBY
 		endif
 	endfunction
 EndState
+State key_swap_view_edit
+	function handleKey(int keyCode)
+		CTX_swapSlots(self.jContext)
+	endfunction
+EndState
 ; I had an idea of pose manager with pursuies me for so long.
 ; Yesterday I have found a way to pick all idles (poses) from ESPs.
 ; Basically this is just a draft for some blog and the mod itself is in the similar 'draft stage'.
