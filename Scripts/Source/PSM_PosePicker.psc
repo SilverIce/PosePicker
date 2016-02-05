@@ -43,13 +43,13 @@ endfunction
 
 Event OnUpdate()
 	self.syncData()
-	_isSyncDelayed = False
 EndEvent
 
 function syncData()
 	;Debug.TraceStack("syncData stack")
 	self.jKeyConf = KHConf_singleton()
 	CTX_syncCollections(self.jContext)
+	_isSyncDelayed = False
 	PrintConsole("Synced data")
 endfunction
 
@@ -60,6 +60,8 @@ function trySyncDataAfterDelay(float delay = 5.0)
 		_isSyncDelayed = True
 		CTX_rememberActiveCollections(self.jContext)
 		self.RegisterForSingleUpdate(delay)
+	else
+		;PrintConsole("sync was already scheduled")
 	endif
 endfunction
 

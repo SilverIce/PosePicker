@@ -249,6 +249,7 @@ function CTX_syncCollections(int jCTX) global
 	while k
 		int o = JIntMap.getObj(jObjectsToSync, k)
 		k = JIntMap.nextKey(jObjectsToSync, k)
+		;PrintConsole("syncing " + PoseList_describe(o))
 		JSONFile_syncInplace(o, PoseList_filePath(o))
 	endwhile
 	JIntMap.clear(jObjectsToSync)
@@ -264,7 +265,8 @@ int function CTX_getCollectionWithName(int jCTX, string name) global
 	endif
 endfunction
 
-;;;;;;
+;;;;;; IO end
+
 string function __poseFileExt() global
 	return ".json"
 endfunction
