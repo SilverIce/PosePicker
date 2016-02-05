@@ -284,8 +284,8 @@ Int Property currentPoseIdx
 endproperty
 
 function notifyOfStatus()
-	Notification("Viewing pose collection: " + PoseList_describe(self.jSourcePoseArray))
-	Notification("Editing pose collection: " + PoseList_describe(self.jActivePoses))
+	; Notification("Viewing pose collection: " + PoseList_describe(self.jSourcePoseArray))
+	; Notification("Editing pose collection: " + PoseList_describe(self.jActivePoses))
 endfunction
 
 Int Property jActivePoses

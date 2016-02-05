@@ -208,6 +208,7 @@ endfunction
 
 function CTX_setViewSlot(int jCTX, int jPoses) global
 	setObj(jCTX, "viewSlot", jPoses)
+	Notification("Viewing pose collection: " + PoseList_describe(jPoses))
 endfunction
 
 int function CTX_getViewSlot(int jCTX) global
@@ -215,6 +216,7 @@ int function CTX_getViewSlot(int jCTX) global
 endfunction
 function CTX_setEditSlot(int jCTX, int jPoses) global
 	setObj(jCTX, "editSlot", jPoses)
+	Notification("Editing pose collection: " + PoseList_describe(jPoses))
 endfunction
 int function CTX_getEditSlot(int jCTX) global
 	return getObj(jCTX, "editSlot")
