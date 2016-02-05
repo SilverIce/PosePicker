@@ -310,6 +310,14 @@ bool function CTX_isCollectionWithNameExists(int jCTX, string name) global
 	return JContainers.fileExistsAtPath(__collectionNameToPath(name))
 endfunction
 
+string function CTX_chooseNewCollectionName(int jCTX, string name) global
+	string normalizedName = JString_normalizeString(name)
+	if "" == normalizedName || True == CTX_isCollectionWithNameExists(jCTX, normalizedName)
+		return ""
+	endif
+	return normalizedName
+endfunction
+
 function CTX_deleteCollection(int jCTX, int jPoses) global
 	if CTX_getEditSlot(jCTX) == jPoses
 		CTX_setEditSlot(jCTX, 0)
@@ -322,9 +330,9 @@ function CTX_deleteCollection(int jCTX, int jPoses) global
 endfunction
 
 bool function CTX_renameCollection(int jCTX, int jPoses, string newName) global
-	string normalizedName = JString_normalizeString(newName)
+	string normalizedName = CTX_chooseNewCollectionName(jCTX, newName)
 
-	if 0 == jPoses || newName == "" || True == CTX_isCollectionWithNameExists(jCTX, normalizedName)
+	if 0 == jPoses || "" == normalizedName
 		return False
 	endif
 

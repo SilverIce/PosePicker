@@ -393,14 +393,20 @@ EndState
 State KEY_PERFORM_ACTION
 	function handleKey(int keyCode)
 
-		string[] aactions = new string[4]
+		int jActionTarget = self.jActivePoses
+		if !jActionTarget
+			return
+		endif
+
+		string[] aactions = new string[5]
 		aactions[0] = "Nothing"
 		aactions[1] = "Create"
 		aactions[2] = "Delete"
 		aactions[3] = "Rename"
+		aactions[4] = "Copy"
 
 		int selectedIdx = self.uilib.ShowList(\
-			"Perform action on " + PoseList_describe(self.jActivePoses)\
+			"Perform action on " + PoseList_describe(jActionTarget)\
 			, asOptions = aactions\
 			, aiStartIndex = -1, aiDefaultIndex = 0)
 
@@ -410,16 +416,32 @@ State KEY_PERFORM_ACTION
 
 		string act = aactions[selectedIdx]
 		if act == "Create"
-			self.createPoseCollection(title = "Create New Pose Collection", suggestedCollectionName = "IDK")
+			self.createPoseCollection(title = "Create New Pose Collection", suggestedCollectionName = "")
 		elseif act == "Delete"
-			CTX_deleteCollection(self.jContext, self.jActivePoses)
+			CTX_deleteCollection(self.jContext, jActionTarget)
 		elseif act == "Nothing"
 			;
 		elseif act == "Rename"
-			string newName = self.uilib.ShowTextInput(asTitle = "Rename collection",  asInitialText = "")
-			if !CTX_renameCollection(self.jContext, self.jActivePoses, newName)
+			string newName = self.uilib.ShowTextInput(asTitle = "Rename collection",  asInitialText = PoseList_getName(jActionTarget))
+			if !CTX_renameCollection(self.jContext, jActionTarget, newName)
 				Notification("Can't rename the collection")
 			endif
+		elseif act == "Copy"
+			string newName = CTX_chooseNewCollectionName(\
+					self.jContext\
+					, self.uilib.ShowTextInput(\
+						asTitle = "Name new collection"\
+						, asInitialText = (PoseList_getName(jActionTarget) + " copy"))\
+				)
+
+			if newName == ""
+				Notification("Can't choose this name")
+				return
+			endif
+
+			int jCopy = JValue.deepCopy(jActionTarget)
+			PoseList_setName(jCopy, newName)
+			CTX_addPoseCollection(self.jContext, jCopy)
 		else
 			Notification("Action "+act+" is not implemented yet")
 		endif
