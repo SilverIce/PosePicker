@@ -50,6 +50,14 @@ int function PoseList_loadFromFile(string collectionName) global
 	PoseList_setExactName(jPoses, collectionName)
 	return jPoses
 endfunction
+bool function PoseList_dump(int jPoses) global
+	if PoseList_isValid(jPoses)
+		string filePath = __collectionNameToPath(PoseList_getName(jPoses))
+		JValue.writeToFile(jPoses, filePath)
+		return true
+	endif
+	return false
+endfunction
 bool function PoseList_isValid(int list) global
 	return PoseList_findPose(list, None) == -1
 endfunction
@@ -260,7 +268,9 @@ function CTX_syncCollections(int jCTX) global
 		int o = JIntMap.getObj(jObjectsToSync, k)
 		k = JIntMap.nextKey(jObjectsToSync, k)
 		;PrintConsole("syncing " + PoseList_describe(o))
-		JSONFile_syncInplace(o, PoseList_filePath(o))
+		if PoseList_isValid(o)
+			JSONFile_syncInplace(o, PoseList_filePath(o))
+		endif
 	endwhile
 	JIntMap.clear(jObjectsToSync)
 endfunction
@@ -303,7 +313,7 @@ string[] function CTX_getCollectionNames(int jCTX) global
 endfunction
 
 function CTX_addPoseCollection(int jCTX, int jPoses) global
-	JValue.writeToFile(jPoses, PoseList_filePath(jPoses))
+	PoseList_dump(jPoses)
 endfunction
 
 bool function CTX_isCollectionWithNameExists(int jCTX, string name) global
@@ -339,7 +349,7 @@ bool function CTX_renameCollection(int jCTX, int jPoses, string newName) global
 	;PrintConsole("deleting collection at " + PoseList_filePath(jPoses))
 	JContainers.removeFileAtPath(PoseList_filePath(jPoses))
 	PoseList_setName(jPoses, normalizedName)
-	JValue.writeToFile(jPoses, PoseList_filePath(jPoses))
+	PoseList_dump(jPoses)
 	return True
 endfunction
 
