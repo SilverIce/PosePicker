@@ -398,12 +398,13 @@ State KEY_PERFORM_ACTION
 			return
 		endif
 
-		string[] aactions = new string[5]
+		string[] aactions = new string[6]
 		aactions[0] = "Nothing"
 		aactions[1] = "Create"
 		aactions[2] = "Delete"
 		aactions[3] = "Rename"
 		aactions[4] = "Copy"
+		aactions[5] = "Sort by ID"
 
 		int selectedIdx = self.uilib.ShowList(\
 			"Perform action on " + PoseList_describe(jActionTarget)\
@@ -442,6 +443,10 @@ State KEY_PERFORM_ACTION
 			int jCopy = JValue.deepCopy(jActionTarget)
 			PoseList_setName(jCopy, newName)
 			CTX_addPoseCollection(self.jContext, jCopy)
+		elseif act == "Sort by ID"
+			Idle pose = PoseList_currentPose(jActionTarget)
+			JArray.sort(PoseList_getList(jActionTarget))
+			PoseList_setPoseIndex(jActionTarget, PoseList_findPose(jActionTarget, pose))
 		else
 			Notification("Action "+act+" is not implemented yet")
 		endif
