@@ -105,7 +105,7 @@ Event OnKeyDown(int keyCode)
 	if handlerState
 		string prevState = self.GetState()
 		self.GoToState(handlerState)
-		self.handleKey(0)
+		self.handleKey(keyCode)
 		self.GoToState(prevState)
 
 		self.trySyncDataAfterDelay()
