@@ -1,20 +1,23 @@
 {
   "altKey": 56,
-  "fileVersion": 1452115968.0,
-  "formatVersion": 6,
+  "fileVersion": 1457291392.0,
+  "formatVersion": 7,
   "handlers": {
     "__metaInfo": {
       "typeName": "JIntMap"
     },
-    "42": "key_swap_view_edit",
+    "265": "key_next_pose",
     "22": "KEY_UNFAVORITE_POSE",
-    "24": "KEY_VIEW_POSE_COLLECTION",
+    "42": "key_swap_view_edit",
+    "258": "key_tfc",
     "47": "KEY_VISIT_NEARBY",
+    "24": "KEY_VIEW_POSE_COLLECTION",
+    "264": "key_prev_pose",
+    "60": "key_rotate_actor_right",
     "34": "KEY_FAVORITE_POSE",
+    "45": "key_activate_pose_collection",
     "44": "KEY_PERFORM_ACTION",
     "38": "KEY_LOAD_FROM_ESP",
-    "45": "key_activate_pose_collection",
-    "265": "KEY_NEXT_POSE",
-    "264": "KEY_PREV_POSE"
+    "59": "key_rotate_actor_left"
   }
 }

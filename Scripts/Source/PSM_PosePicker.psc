@@ -2,6 +2,7 @@ Scriptname PSM_PosePicker extends Quest
 
 import Debug
 import PSM_PosemanagerEntries
+import JContainers_DomainExample
 
 Bool Property isActive
 	Bool function get()
@@ -76,7 +77,7 @@ Int Property jKeyConf
 			return
 		endif
 
-		_jKeyConf = JValue.releaseAndRetain(_jKeyConf, o, "PSM_PosePicker")
+		_jKeyConf = JValue_releaseAndRetain(_jKeyConf, o, "PSM_PosePicker")
 
 		if o != 0
 			self.listenKeys()
@@ -133,13 +134,13 @@ function listenKeys()
 	UnregisterForAllKeys()
 
 	int handlers = KHConf_getKeyHandlers(jKeyConf)
-	PrintConsole("PSM_PosemanagerEntries.keyCode2Handler: "+ handlers+" count "+JValue.count(handlers))
+	PrintConsole("PSM_PosemanagerEntries.keyCode2Handler: "+ handlers+" count "+JValue_count(handlers))
 
-	int k = JIntMap.getNthKey(handlers, 0)
+	int k = JIntMap_getNthKey(handlers, 0)
 	while k
 		RegisterForKey(k)
-		PrintConsole("RegisterForKey: "+ k+":"+ JIntMap.getStr(handlers, k))
-		k = JIntMap.nextKey(handlers, k)
+		PrintConsole("RegisterForKey: "+ k+":"+ JIntMap_getStr(handlers, k))
+		k = JIntMap_nextKey(handlers, k)
 	endwhile
 
 	PrintConsole("listenKeys end")
@@ -210,31 +211,41 @@ State KEY_ACTIVATE_POSE_COLLECTION
 	endfunction
 EndState
 ; Load poses from ESP
-int KEY_LOAD_FROM_ESP_handleKey_lastIndex = -1
+;int KEY_LOAD_FROM_ESP_handleKey_lastIndex = -1
 State KEY_LOAD_FROM_ESP 
 	function handleKey(int keyCode)
 
-		String[] modList = PSM_PosemanagerEntries.getModList()
-		int selectedIdx = self.uilib.ShowList("Pick a plugin", asOptions = modList, aiStartIndex = KEY_LOAD_FROM_ESP_handleKey_lastIndex, aiDefaultIndex = -1)
+		string partOfName = self.uilib.ShowTextInput(asTitle = "Filter plugins by name", asInitialText = "")
+
+		int jModList = JValue_retain(PSM_PosemanagerEntries.getModList(), tag = "PSM_PosePicker")
+		int i = 0
+		while i < JArray_count(jModList)
+			String modName = JArray_getStr(jModList, i)
+			if StringUtil.Find(modName, partOfName) == -1
+				JArray_eraseIndex(jModList, i)
+			else
+				i += 1
+			EndIf
+		endwhile
+
+		int selectedIdx = self.uilib.ShowList(\
+			"Pick a plugin"\
+			, asOptions = JArray_toStringArray(jModList)\
+			, aiStartIndex = -1\
+			, aiDefaultIndex = -1)
+
+		string modName = JArray_getStr(jModList, selectedIdx)
+		jModList = JValue_release(jModList)
+
 		if selectedIdx == -1
 			return
 		endif
-
-		KEY_LOAD_FROM_ESP_handleKey_lastIndex = selectedIdx
-		string modName = modList[selectedIdx]
-		; int jPoses = self.pickPoseList(suggestedListName = (modName + " <- Rename Me"))
-		; if !jPoses
-		; 	Notification("No pose list selected")
-		; 	return
-		; endif
 
 		int jPoses = PoseList_loadFromPlugin(modName)
 		if !jPoses
 			Notification("No poses in " + modName)
 			return
 		endif
-
-		Notification("Press Alt-F to add a pose into current active pose collection")
 
 		CTX_addPoseCollection(self.jContext, jPoses)
 		self.jSourcePoseArray = jPoses
@@ -322,7 +333,7 @@ Int Property jContext
 		return _jContext
 	endfunction
 	function set(int o)
-		_jContext = JValue.releaseAndRetain(_jContext, o, "PSM_PosePicker")
+		_jContext = JValue_releaseAndRetain(_jContext, o, "PSM_PosePicker")
 	endfunction
 endproperty
 int _jContext = 0
@@ -345,35 +356,36 @@ endfunction
 
 int function pickPoseList(string headerText, string suggestedListName, int jCurrentSelectedCollection = 0)
 
-	int jPoseListnames = JValue.retain(JArray.objectWithStrings(CTX_getCollectionNames(self.jContext)), tag = "PSM_PosePicker")
-	JArray.addStr(jPoseListnames, "Create new collection", 0)
+	int jPoseListnames = JValue_retain(JArray_objectWithStrings(CTX_getCollectionNames(self.jContext)), tag = "PSM_PosePicker")
+	JArray_addStr(jPoseListnames, "Create new collection", 0)
 
 	;; Reorder names, so jCurrentSelectedCollection always at 1-st index
-	int iCurrnameCollIdx = JArray.findStr(jPoseListnames, PoseList_getName(jCurrentSelectedCollection), 0)
+	int iCurrnameCollIdx = JArray_findStr(jPoseListnames, PoseList_getName(jCurrentSelectedCollection), 0)
 	if iCurrnameCollIdx != -1
-		JArray.swapItems(jPoseListnames, 1, iCurrnameCollIdx)
+		JArray_swapItems(jPoseListnames, 1, iCurrnameCollIdx)
 	endif
 	;;
 
 	int selectedIdx = uilib.ShowList(headerText\
 		, asOptions = JArray_toStringArray(jPoseListnames)\
-		, aiStartIndex = JArray.findStr(jPoseListnames, PoseList_getName(jCurrentSelectedCollection), 0)\
+		, aiStartIndex = JArray_findStr(jPoseListnames, PoseList_getName(jCurrentSelectedCollection), 0)\
 		, aiDefaultIndex = -1)
 
+	string selectedPoseListname = JArray_getStr(jPoseListnames, selectedIdx)
+	jPoseListnames = JValue_release(jPoseListnames)
+
 	if selectedIdx == -1
-		JValue.release(jPoseListnames)
 		return 0
 	endif
 
 	int jPoses = 0
 
 	if selectedIdx == 0
-		jPoses = self.createPoseCollection(title = "Create new pose collection", suggestedCollectionName = "New Collection")
+		jPoses = self.createPoseCollection(title = "Create new pose collection", suggestedCollectionName = "")
 	else
-		jPoses = CTX_getCollectionWithName(self.jContext, JArray.getStr(jPoseListnames, selectedIdx))
+		jPoses = CTX_getCollectionWithName(self.jContext, selectedPoseListname)
 	endif
 
-	JValue.release(jPoseListnames)
 	PrintConsole("pickPoseList: " + PoseList_describe(jPoses) + " picked")
 
 	return jPoses
@@ -387,7 +399,7 @@ State KEY_SYNC_DATA
 EndState
 State KEY_DUMP
 	function handleKey(int keyCode)
-		JValue.writeToFile(self.jContext, __collectionsPath() + "__dump.json")
+		JValue_writeToFile(self.jContext, __collectionsPath() + "__dump.json")
 	endfunction
 EndState
 State KEY_PERFORM_ACTION
@@ -423,7 +435,7 @@ State KEY_PERFORM_ACTION
 		elseif act == "Nothing"
 			;
 		elseif act == "Rename"
-			string newName = self.uilib.ShowTextInput(asTitle = "Rename collection",  asInitialText = PoseList_getName(jActionTarget))
+			string newName = self.uilib.ShowTextInput(asTitle = "Rename collection", asInitialText = PoseList_getName(jActionTarget))
 			if !CTX_renameCollection(self.jContext, jActionTarget, newName)
 				Notification("Can't rename the collection")
 			endif
@@ -440,12 +452,12 @@ State KEY_PERFORM_ACTION
 				return
 			endif
 
-			int jCopy = JValue.deepCopy(jActionTarget)
+			int jCopy = JValue_deepCopy(jActionTarget)
 			PoseList_setName(jCopy, newName)
 			CTX_addPoseCollection(self.jContext, jCopy)
 		elseif act == "Sort by ID"
 			Idle pose = PoseList_currentPose(jActionTarget)
-			JArray.sort(PoseList_getList(jActionTarget))
+			JArray_sort(PoseList_getList(jActionTarget))
 			PoseList_setPoseIndex(jActionTarget, PoseList_findPose(jActionTarget, pose))
 		else
 			Notification("Action "+act+" is not implemented yet")
@@ -489,6 +501,98 @@ EndState
 State key_swap_view_edit
 	function handleKey(int keyCode)
 		CTX_swapSlots(self.jContext)
+	endfunction
+EndState
+
+function KEY_ROTATE_ACTOR_rotate(Actor target, float byDelta, int whileKeyPressed)
+	;PrintConsole("KEY_ROTATE_ACTOR_rotate begin, target="+target)
+	;Actor akTarget = self.pickPoseTargetActor()
+	Float zAngle = target.GetAngleZ()
+	ConsoleUtil.SetSelectedReference(target)
+
+	while Input.IsKeyPressed(whileKeyPressed)
+		zAngle += byDelta
+		ConsoleUtil.ExecuteCommand("setangle z " + zAngle)
+		;PrintConsole("setangle z " + zAngle)
+		Utility.Wait(0.05)
+	endwhile
+	;PrintConsole("KEY_ROTATE_ACTOR_rotate end")
+EndFunction
+
+State key_rotate_actor_right
+	function handleKey(int keyCode)
+
+		;int kSlotMask30 = 0x00000001 ; HEAD
+		;int msnIndex = 1
+		; 9 - string - ShaderTexture (index 0-8)
+		;int ikey = 9
+		;int slotMask = 0x00000008
+; Function AddSkinOverrideString(ObjectReference ref, bool isFemale, bool firstPerson, int slotMask, int key, int index, string value, bool persist) native global
+		;NiOverride.AddSkinOverrideString(Game.GetPlayer(), true, false, kSlotMask30, ikey, msnIndex, "textures\\customraces\\test.dds", false)
+
+		self.KEY_ROTATE_ACTOR_rotate(target = self.pickPoseTargetActor(), byDelta = 7.0, whileKeyPressed = keyCode)
+	endfunction
+EndState
+State key_rotate_actor_left
+	function handleKey(int keyCode)
+		self.KEY_ROTATE_ACTOR_rotate(target = self.pickPoseTargetActor(), byDelta = -7.0, whileKeyPressed = keyCode)
+	endfunction
+EndState
+State KEY_TFC
+	function handleKey(int keyCode)
+
+		; UIExtensions.GetMenu("UIListMenu", reset = true)
+
+		;Debug.ToggleMenus()
+		ConsoleUtil.ExecuteCommand("tfc")
+; Valid keys
+; ID - TYPE - Name
+; 0 - int - ShaderEmissiveColor
+; 1 - float - ShaderEmissiveMultiple
+; 2 - float - ShaderGlossiness
+; 3 - float - ShaderSpecularStrength
+; 4 - float - ShaderLightingEffect1
+; 5 - float - ShaderLightingEffect2
+; 6 - TextureSet - ShaderTextureSet
+; 7 - int - ShaderTintColor
+; 8 - float - ShaderAlpha
+; 9 - string - ShaderTexture (index 0-8)
+; 20 - float - ControllerStartStop (-1.0 for stop, anything else indicates start time)
+; 21 - float - ControllerStartTime
+; 22 - float - ControllerStopTime
+; 23 - float - ControllerFrequency
+; 24 - float - ControllerPhase
+
+		; TextureSet ts = Game.GetFormFromFile(aiFormID = 0x3b521, asFilename = "Skyrim.esm") as TextureSet
+
+		; Notification("ts " + ts)
+
+		; bool pisFemale = true
+		; string pnode = "FemaleHead.nif"
+		; int pkey = 6
+		; int pindex = -1
+		; TextureSet pvalue = ts
+		; bool ppersist = True
+
+		; NiOverride.AddNodeOverrideTextureSet(ref = Game.GetPlayer()\
+		; 	, isFemale = pisFemale\
+		; 	, node = pnode\
+		; 	, key = pkey\
+		; 	, index = pindex\
+		; 	, value = pvalue\
+		; 	, persist = ppersist\
+		; )
+
+		; NiOverride.ApplyNodeOverrides(Game.GetPlayer())
+
+		; TextureSet out = NiOverride.GetNodeOverrideTextureSet(ref = Game.GetPlayer()\
+		; 	, isFemale = pisFemale\
+		; 	, node = pnode\
+		; 	, key = pkey\
+		; 	, index = pindex\
+		; )
+
+		; Notification("out " + out)
 	endfunction
 EndState
 ; I had an idea of pose manager with pursuies me for so long.
